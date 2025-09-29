@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import CandlestickChart from '@/components/CandlestickChart';
-import { fetchStockData } from '@/lib/yahooFinance';
+import CandlestickChart from '../components/CandlestickChart';
+import { fetchStockData } from '../lib/yahooFinance';
 
 export default function LevelUpPage() {
   const [ticker, setTicker] = useState('');

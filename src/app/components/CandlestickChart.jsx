@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { calculateSupportLine } from '@/lib/technicalAnalysis';
+import { calculateSupportLine } from '../lib/technicalAnalysis';
 
 export default function CandlestickChart({ data, ticker }) {
   const canvasRef = useRef(null);
