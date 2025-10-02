@@ -1,10 +1,12 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import CandlestickChart from '../components/CandlestickChart';
 import { fetchStockData } from '../lib/yahooFinance';
 
 export default function LevelUpPage() {
+  const router = useRouter();
   const [ticker, setTicker] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -43,6 +45,23 @@ export default function LevelUpPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      {/* Навигационная шапка */}
+      <div className="bg-white shadow-md border-b border-gray-200">
+        <div className="flex gap-4 p-4">
+          <button 
+            className="px-8 py-3 bg-green-500 text-white rounded-full font-medium shadow-lg"
+          >
+            Level Up
+          </button>
+          <button 
+            onClick={() => router.push('/leveldown')}
+            className="px-8 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full font-medium transition-colors"
+          >
+            Level Down
+          </button>
+        </div>
+      </div>
+
       <div className="flex">
         <div className="w-64 bg-[#8B9A8B] min-h-screen p-6">
           <h2 className="text-white text-xl font-semibold mb-8">Level Up Analysis</h2>

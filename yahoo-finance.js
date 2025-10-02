@@ -3,8 +3,8 @@ const yahooFinance = require('yahoo-finance2').default;
 async function getData() {
     try {
         const result = await yahooFinance.historical('MSFT', {
-            period1: '2025-08-30',
-            period2: '2025-09-20',
+            period1: '2025-07-1',
+            period2: '2025-07-15',
         });
         
         result.forEach(day => {

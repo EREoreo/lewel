@@ -131,10 +131,10 @@ export default function CandlestickChart({ data, ticker }) {
             {new Date(hoveredCandle.date).toLocaleDateString('ru-RU')}
           </div>
           <div className="space-y-0.5 text-xs">
-            <div>Open: ${hoveredCandle.open.toFixed(2)}</div>
-            <div>High: ${hoveredCandle.high.toFixed(2)}</div>
-            <div>Low: ${hoveredCandle.low.toFixed(2)}</div>
-            <div>Close: ${hoveredCandle.close.toFixed(2)}</div>
+            <div className="text-black ">Open: ${hoveredCandle.open.toFixed(2)}</div>
+            <div className="text-black ">High: ${hoveredCandle.high.toFixed(2)}</div>
+            <div className="text-black ">Low: ${hoveredCandle.low.toFixed(2)}</div>
+            <div className="text-black ">Close: ${hoveredCandle.close.toFixed(2)}</div>
             <div className={hoveredCandle.close > hoveredCandle.open ? 'text-green-600' : 'text-red-600'}>
               {hoveredCandle.close > hoveredCandle.open ? '↑' : '↓'} 
               {Math.abs(hoveredCandle.close - hoveredCandle.open).toFixed(2)} 
@@ -145,24 +145,58 @@ export default function CandlestickChart({ data, ticker }) {
       )}
 
       {supportLine && (
-        <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-          <h4 className="font-semibold text-sm mb-2">Анализ линии поддержки:</h4>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <span className="text-gray-600">Начальный уровень:</span>
-              <span className="ml-2 font-medium">${supportLine.startPrice.toFixed(2)}</span>
+        <div className="mt-4 space-y-4">
+          <div className="p-4 bg-blue-50 rounded-lg border-2 border-blue-200">
+            <h4 className="font-semibold text-base mb-3 text-blue-900">📊 Точки линии поддержки:</h4>
+            <div className="space-y-3">
+              {supportLine.points.map((point, idx) => {
+                const candle = data[point.index];
+                const date = new Date(candle.date);
+                return (
+                  <div key={idx} className="bg-white p-3 rounded-lg shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="font-semibold text-blue-700">Точка {idx + 1}:</span>
+                        <span className="ml-2 text-lg font-bold text-gray-800">${point.price.toFixed(2)}</span>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm text-gray-600">
+                          {date.toLocaleDateString('ru-RU', { 
+                            day: '2-digit', 
+                            month: 'long', 
+                            year: 'numeric' 
+                          })}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          День #{point.index + 1} из {data.length}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-            <div>
-              <span className="text-gray-600">Текущий уровень:</span>
-              <span className="ml-2 font-medium">${supportLine.endPrice.toFixed(2)}</span>
-            </div>
-            <div>
-              <span className="text-gray-600">Угол наклона:</span>
-              <span className="ml-2 font-medium">${supportLine.slope.toFixed(2)}/день</span>
-            </div>
-            <div>
-              <span className="text-gray-600">Сила:</span>
-              <span className="ml-2 font-medium text-green-600">{supportLine.touches} касания</span>
+          </div>
+
+          <div className="p-4 bg-green-50 rounded-lg">
+            <h4 className="font-semibold text-sm mb-2">Характеристики линии поддержки:</h4>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-gray-600">Начальный уровень:</span>
+                <span className="ml-2 font-medium">${supportLine.startPrice.toFixed(2)}</span>
+              </div>
+              <div>
+                <span className="text-gray-600">Конечный уровень:</span>
+                <span className="ml-2 font-medium">${supportLine.endPrice.toFixed(2)}</span>
+              </div>
+              <div>
+                <span className="text-gray-600">Угол наклона:</span>
+                <span className="ml-2 font-medium">${supportLine.slope.toFixed(4)}/день</span>
+              </div>
+              <div>
+                <span className="text-gray-600">Количество касаний:</span>
+                <span className="ml-2 font-medium text-green-600">{supportLine.touches}</span>
+              </div>
             </div>
           </div>
         </div>
