@@ -2,11 +2,40 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { calculateResistanceLine } from '../lib/resistanceAnalysis';
+import * as XLSX from 'xlsx';
 
 export default function ResistanceChart({ data, ticker }) {
   const canvasRef = useRef(null);
   const [resistanceLine, setResistanceLine] = useState(null);
   const [hoveredCandle, setHoveredCandle] = useState(null);
+
+  const downloadExcel = () => {
+    if (!resistanceLine || !ticker) return;
+
+    const point1 = resistanceLine.points[0];
+    const point2 = resistanceLine.points[1];
+
+    // Создаем данные для Excel в одну строку
+    const excelData = [
+      [
+        ticker, // A1
+        point1.price.toFixed(2), // A2
+        point2.price.toFixed(2), // A3
+        new Date(point1.date).toLocaleDateString('ru-RU'), // A4
+        new Date(point2.date).toLocaleDateString('ru-RU')  // A5
+      ]
+    ];
+
+    // Создаем рабочую книгу
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(excelData);
+
+    // Добавляем лист в книгу
+    XLSX.utils.book_append_sheet(wb, ws, 'Resistance Line');
+
+    // Скачиваем файл
+    XLSX.writeFile(wb, `${ticker}_resistance_line.xlsx`);
+  };
 
   useEffect(() => {
     if (!data || data.length === 0) return;
@@ -150,6 +179,15 @@ export default function ResistanceChart({ data, ticker }) {
 
       {resistanceLine && (
         <div className="mt-4 space-y-4">
+          <div className="flex justify-end mb-2">
+            <button
+              onClick={downloadExcel}
+              className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+            >
+              📥 Скачать Excel
+            </button>
+          </div>
+
           <div className="p-4 bg-red-50 rounded-lg border-2 border-red-200">
             <h4 className="font-semibold text-base mb-3 text-red-900">📊 Точки линии сопротивления:</h4>
             <div className="space-y-3">
@@ -183,19 +221,19 @@ export default function ResistanceChart({ data, ticker }) {
           </div>
 
           <div className="p-4 bg-orange-50 rounded-lg">
-            <h4 className="font-semibold text-sm mb-2">Характеристики линии сопротивления:</h4>
+            <h4 className="font-semibold text-sm mb-2 text-black">Характеристики линии сопротивления:</h4>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <span className="text-gray-600">Начальный уровень:</span>
-                <span className="ml-2 font-medium">${resistanceLine.startPrice.toFixed(2)}</span>
+                <span className="ml-2 font-medium text-black">${resistanceLine.startPrice.toFixed(2)}</span>
               </div>
               <div>
                 <span className="text-gray-600">Конечный уровень:</span>
-                <span className="ml-2 font-medium">${resistanceLine.endPrice.toFixed(2)}</span>
+                <span className="ml-2 font-medium text-black">${resistanceLine.endPrice.toFixed(2)}</span>
               </div>
               <div>
                 <span className="text-gray-600">Угол наклона:</span>
-                <span className="ml-2 font-medium">${resistanceLine.slope.toFixed(4)}/день</span>
+                <span className="ml-2 font-medium text-black">${resistanceLine.slope.toFixed(4)}/день</span>
               </div>
               <div>
                 <span className="text-gray-600">Количество касаний:</span>

@@ -2,11 +2,40 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { calculateSupportLine } from '../lib/technicalAnalysis';
+import * as XLSX from 'xlsx';
 
 export default function CandlestickChart({ data, ticker }) {
   const canvasRef = useRef(null);
   const [supportLine, setSupportLine] = useState(null);
   const [hoveredCandle, setHoveredCandle] = useState(null);
+
+  const downloadExcel = () => {
+    if (!supportLine || !ticker) return;
+
+    const point1 = supportLine.points[0];
+    const point2 = supportLine.points[1];
+
+    // Создаем данные для Excel в одну строку
+    const excelData = [
+      [
+        ticker, // A1
+        point1.price.toFixed(2), // A2
+        point2.price.toFixed(2), // A3
+        new Date(point1.date).toLocaleDateString('ru-RU'), // A4
+        new Date(point2.date).toLocaleDateString('ru-RU')  // A5
+      ]
+    ];
+
+    // Создаем рабочую книгу
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(excelData);
+
+    // Добавляем лист в книгу
+    XLSX.utils.book_append_sheet(wb, ws, 'Support Line');
+
+    // Скачиваем файл
+    XLSX.writeFile(wb, `${ticker}_support_line.xlsx`);
+  };
 
   useEffect(() => {
     if (!data || data.length === 0) return;
@@ -131,10 +160,10 @@ export default function CandlestickChart({ data, ticker }) {
             {new Date(hoveredCandle.date).toLocaleDateString('ru-RU')}
           </div>
           <div className="space-y-0.5 text-xs">
-            <div className="text-black ">Open: ${hoveredCandle.open.toFixed(2)}</div>
-            <div className="text-black ">High: ${hoveredCandle.high.toFixed(2)}</div>
-            <div className="text-black ">Low: ${hoveredCandle.low.toFixed(2)}</div>
-            <div className="text-black ">Close: ${hoveredCandle.close.toFixed(2)}</div>
+            <div className="text-black">Open: ${hoveredCandle.open.toFixed(2)}</div>
+            <div className="text-black">High: ${hoveredCandle.high.toFixed(2)}</div>
+            <div className="text-black">Low: ${hoveredCandle.low.toFixed(2)}</div>
+            <div className="text-black">Close: ${hoveredCandle.close.toFixed(2)}</div>
             <div className={hoveredCandle.close > hoveredCandle.open ? 'text-green-600' : 'text-red-600'}>
               {hoveredCandle.close > hoveredCandle.open ? '↑' : '↓'} 
               {Math.abs(hoveredCandle.close - hoveredCandle.open).toFixed(2)} 
@@ -146,6 +175,15 @@ export default function CandlestickChart({ data, ticker }) {
 
       {supportLine && (
         <div className="mt-4 space-y-4">
+          <div className="flex justify-end mb-2">
+            <button
+              onClick={downloadExcel}
+              className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+            >
+              📥 Скачать Excel
+            </button>
+          </div>
+
           <div className="p-4 bg-blue-50 rounded-lg border-2 border-blue-200">
             <h4 className="font-semibold text-base mb-3 text-blue-900">📊 Точки линии поддержки:</h4>
             <div className="space-y-3">
@@ -179,19 +217,19 @@ export default function CandlestickChart({ data, ticker }) {
           </div>
 
           <div className="p-4 bg-green-50 rounded-lg">
-            <h4 className="font-semibold text-sm mb-2">Характеристики линии поддержки:</h4>
+            <h4 className="font-semibold text-sm mb-2 text-black">Характеристики линии поддержки:</h4>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <span className="text-gray-600">Начальный уровень:</span>
-                <span className="ml-2 font-medium">${supportLine.startPrice.toFixed(2)}</span>
+                <span className="ml-2 font-medium text-black">${supportLine.startPrice.toFixed(2)}</span>
               </div>
               <div>
                 <span className="text-gray-600">Конечный уровень:</span>
-                <span className="ml-2 font-medium">${supportLine.endPrice.toFixed(2)}</span>
+                <span className="ml-2 font-medium text-black">${supportLine.endPrice.toFixed(2)}</span>
               </div>
               <div>
                 <span className="text-gray-600">Угол наклона:</span>
-                <span className="ml-2 font-medium">${supportLine.slope.toFixed(4)}/день</span>
+                <span className="ml-2 font-medium text-black">${supportLine.slope.toFixed(4)}/день</span>
               </div>
               <div>
                 <span className="text-gray-600">Количество касаний:</span>
