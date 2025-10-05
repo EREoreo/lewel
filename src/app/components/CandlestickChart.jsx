@@ -21,8 +21,8 @@ export default function CandlestickChart({ data, ticker }) {
         ticker, // A1
         point1.price.toFixed(2), // A2
         point2.price.toFixed(2), // A3
-        new Date(point1.date).toLocaleDateString('ru-RU'), // A4
-        new Date(point2.date).toLocaleDateString('ru-RU')  // A5
+       point1.index + 1, // Номер дня 1
+       point2.index + 1  // Номер дня 2 // A5
       ]
     ];
 

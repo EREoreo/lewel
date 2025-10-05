@@ -7,7 +7,7 @@ export async function GET(request) {
   const startDate = searchParams.get('startDate');
   const endDate = searchParams.get('endDate');
 
-  console.log('API called with:', { ticker, startDate, endDate }); // лог для проверки
+  console.log('API called with:', { ticker, startDate, endDate });
 
   if (!ticker || !startDate || !endDate) {
     return NextResponse.json(
@@ -17,9 +17,19 @@ export async function GET(request) {
   }
 
   try {
+    // Преобразуем даты в объекты Date
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    // Вычитаем 1 день из начальной даты
+    start.setDate(start.getDate() );
+    
+    // Добавляем 1 день к конечной дате
+    end.setDate(end.getDate() + 1);
+
     const result = await yahooFinance.chart(ticker, {
-      period1: startDate,
-      period2: endDate,
+      period1: start,
+      period2: end,
       interval: '1d'
     });
     
@@ -32,7 +42,9 @@ export async function GET(request) {
       volume: quote.volume
     }));
 
-    console.log('Returning data, length:', data.length); // лог для проверки
+    console.log('Returning data, length:', data.length);
+    console.log('Date range:', data[0]?.date, '-', data[data.length - 1]?.date);
+    
     return NextResponse.json(data);
   } catch (error) {
     console.error('Error fetching stock data:', error);
