@@ -59,6 +59,18 @@ export default function LevelUpPage() {
           >
             Level Down
           </button>
+          <button 
+            onClick={() => router.push('/level1')}
+            className="px-8 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full font-medium transition-colors"
+          >
+            Level1
+          </button>
+          <button 
+            onClick={() => router.push('/level2')}
+            className="px-8 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full font-medium transition-colors"
+          >
+            Level2
+          </button>
         </div>
       </div>
 
