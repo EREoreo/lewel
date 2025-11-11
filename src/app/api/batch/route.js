@@ -65,7 +65,7 @@ export async function POST(request) {
         }));
 
         if (stockData.length === 0) {
-          results.push([ticker, 'Нет данных', '', '', '', '']);
+          results.push([ticker, 'Нет данных', '', '', '', '', '', '', '']);
           continue;
         }
 
@@ -78,12 +78,13 @@ export async function POST(request) {
         }
 
         if (!analysisResult) {
-          results.push([ticker, 'Не найдено', '', '', '', '']);
+          results.push([ticker, 'Не найдено', '', '', '', '', '', '', '']);
           continue;
         }
 
         const point1 = analysisResult.points[0];
         const point2 = analysisResult.points[1];
+        const strategy = analysisResult.tradingStrategy;
 
         results.push([
           ticker,
@@ -91,12 +92,15 @@ export async function POST(request) {
           point2.price.toFixed(2),
           point1.index + 1,
           point2.index + 1,
-          analysisResult.percentPerDayPercent + '%'
+          analysisResult.percentPerDayPercent + '%',
+          strategy ? strategy.avgPercentPerDay + '%' : 'N/A',
+          strategy ? strategy.entryPercent + '%' : 'N/A',
+          strategy ? strategy.exitPercent + '%' : 'N/A'
         ]);
 
       } catch (error) {
         console.error(`Error processing ${ticker}:`, error);
-        results.push([ticker, 'Ошибка', '', '', '', '']);
+        results.push([ticker, 'Ошибка', '', '', '', '', '', '', '']);
       }
     }
 
@@ -104,7 +108,17 @@ export async function POST(request) {
     const wb = XLSX.utils.book_new();
     const sheetName = analysisType === 'level1' ? 'Level1 Support' : 'Level2 Resistance';
     const ws = XLSX.utils.aoa_to_sheet([
-      ['Тикер', 'Цена точки 1', 'Цена точки 2', 'День 1', 'День 2', 'Процент в день'],
+      [
+        'Тикер', 
+        'Цена точки 1', 
+        'Цена точки 2', 
+        'День 1', 
+        'День 2', 
+        'Процент в день',
+        'Средний % в день',
+        '% для входа',
+        '% для выхода'
+      ],
       ...results
     ]);
 

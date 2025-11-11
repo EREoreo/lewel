@@ -14,6 +14,7 @@ export default function Level2Chart({ data, ticker }) {
 
     const point1 = resistanceLine.points[0];
     const point2 = resistanceLine.points[1];
+    const strategy = resistanceLine.tradingStrategy;
 
     // Создаем данные для Excel в одну строку
     const excelData = [
@@ -23,7 +24,10 @@ export default function Level2Chart({ data, ticker }) {
         point2.price.toFixed(2), // A3
         point1.index + 1, // Номер дня 1
         point2.index + 1, // Номер дня 2
-        resistanceLine.percentPerDayPercent + '%' // Процент в день
+        resistanceLine.percentPerDayPercent + '%', // Процент в день
+        strategy ? strategy.avgPercentPerDay + '%' : 'N/A', // Средний % в день (торговля)
+        strategy ? strategy.entryPercent + '%' : 'N/A', // % для входа (SHORT)
+        strategy ? strategy.exitPercent + '%' : 'N/A' // % для выхода (SHORT)
       ]
     ];
 
@@ -202,6 +206,47 @@ export default function Level2Chart({ data, ticker }) {
               📥 Скачать Excel
             </button>
           </div>
+
+          {/* Новый блок с оптимальной стратегией SHORT */}
+          {resistanceLine.tradingStrategy && (
+            <div className="p-4 bg-gradient-to-r from-red-50 to-orange-50 rounded-lg border-2 border-red-300">
+              <h4 className="font-semibold text-lg mb-3 text-red-900">🎯 Оптимальная торговая стратегия (SHORT):</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">Средний % в день</div>
+                  <div className="text-2xl font-bold text-red-600">
+                    {resistanceLine.tradingStrategy.avgPercentPerDay}%
+                  </div>
+                </div>
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">Всего сделок</div>
+                  <div className="text-2xl font-bold text-blue-600">
+                    {resistanceLine.tradingStrategy.totalTrades}
+                  </div>
+                </div>
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">% для входа (SHORT)</div>
+                  <div className="text-xl font-bold text-purple-600">
+                    -{resistanceLine.tradingStrategy.entryPercent}%
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">от уровня сопротивления</div>
+                </div>
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">% для выхода (выкуп)</div>
+                  <div className="text-xl font-bold text-orange-600">
+                    -{resistanceLine.tradingStrategy.exitPercent}%
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">от уровня сопротивления</div>
+                </div>
+              </div>
+              <div className="mt-3 p-2 bg-white rounded text-sm text-gray-700">
+                <strong>Общая прибыль:</strong> {resistanceLine.tradingStrategy.totalProfit}%
+              </div>
+              <div className="mt-2 p-2 bg-yellow-50 rounded text-xs text-gray-700">
+                <strong>ℹ️ SHORT стратегия:</strong> Продаем когда цена достигает уровня (Сопротивление × (1 - {resistanceLine.tradingStrategy.entryPercent}%)), выкупаем когда падает до (Сопротивление × (1 - {resistanceLine.tradingStrategy.exitPercent}%))
+              </div>
+            </div>
+          )}
 
           <div className="p-4 bg-red-50 rounded-lg border-2 border-red-200">
             <h4 className="font-semibold text-base mb-3 text-red-900">📊 Точки экспоненциальной линии сопротивления:</h4>

@@ -14,6 +14,7 @@ export default function Level1Chart({ data, ticker }) {
 
     const point1 = supportLine.points[0];
     const point2 = supportLine.points[1];
+    const strategy = supportLine.tradingStrategy;
 
     // Создаем данные для Excel в одну строку
     const excelData = [
@@ -23,7 +24,10 @@ export default function Level1Chart({ data, ticker }) {
         point2.price.toFixed(2), // A3
         point1.index + 1, // Номер дня 1
         point2.index + 1, // Номер дня 2
-        supportLine.percentPerDayPercent + '%' // Процент в день
+        supportLine.percentPerDayPercent + '%', // Процент в день
+        strategy ? strategy.avgPercentPerDay + '%' : 'N/A', // Средний % в день (торговля)
+        strategy ? strategy.entryPercent + '%' : 'N/A', // % для входа
+        strategy ? strategy.exitPercent + '%' : 'N/A' // % для выхода
       ]
     ];
 
@@ -202,6 +206,44 @@ export default function Level1Chart({ data, ticker }) {
               📥 Скачать Excel
             </button>
           </div>
+
+          {/* Новый блок с оптимальной стратегией */}
+          {supportLine.tradingStrategy && (
+            <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg border-2 border-emerald-300">
+              <h4 className="font-semibold text-lg mb-3 text-emerald-900">🎯 Оптимальная торговая стратегия:</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">Средний % в день</div>
+                  <div className="text-2xl font-bold text-emerald-600">
+                    {supportLine.tradingStrategy.avgPercentPerDay}%
+                  </div>
+                </div>
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">Всего сделок</div>
+                  <div className="text-2xl font-bold text-blue-600">
+                    {supportLine.tradingStrategy.totalTrades}
+                  </div>
+                </div>
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">% для входа</div>
+                  <div className="text-xl font-bold text-purple-600">
+                    +{supportLine.tradingStrategy.entryPercent}%
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">от уровня поддержки</div>
+                </div>
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">% для выхода</div>
+                  <div className="text-xl font-bold text-orange-600">
+                    +{supportLine.tradingStrategy.exitPercent}%
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">от уровня поддержки</div>
+                </div>
+              </div>
+              <div className="mt-3 p-2 bg-white rounded text-sm text-gray-700">
+                <strong>Общая прибыль:</strong> {supportLine.tradingStrategy.totalProfit}%
+              </div>
+            </div>
+          )}
 
           <div className="p-4 bg-blue-50 rounded-lg border-2 border-blue-200">
             <h4 className="font-semibold text-base mb-3 text-blue-900">📊 Точки экспоненциальной линии поддержки:</h4>

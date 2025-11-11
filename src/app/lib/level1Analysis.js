@@ -1,3 +1,125 @@
+// Функция для оптимизации стратегии торговли на основе экспоненциальной линии поддержки
+function optimizeLevel1TradingStrategy(data, curvePoints) {
+  if (!data || data.length < 2 || !curvePoints) return null;
+
+  // Находим локальный максимум для определения предела выхода
+  let localMax = 0;
+  data.forEach(candle => {
+    if (candle.high > localMax) {
+      localMax = candle.high;
+    }
+  });
+
+  let bestStrategy = null;
+  let maxAvgPercentPerDay = -Infinity;
+
+  // Перебираем все комбинации
+  for (let entryPercent = 0.3; entryPercent <= 10.0; entryPercent += 0.1) {
+    for (let exitPercent = entryPercent + 0.3; exitPercent <= 20.0; exitPercent += 0.1) {
+      
+      // Проверяем, достигает ли цена выхода локального максимума
+      const maxSupportPrice = Math.max(...curvePoints.map(p => p.price));
+      const exitPrice = maxSupportPrice * (1 + exitPercent / 100);
+      
+      // Если цена выхода не достигает локального максимума, прекращаем перебор для этого входа
+      if (exitPrice > localMax) {
+        break;
+      }
+
+      // Симулируем торговлю для этой комбинации
+      const result = simulateTrading(data, curvePoints, entryPercent, exitPercent);
+      
+      if (result && result.avgPercentPerDay > maxAvgPercentPerDay) {
+        maxAvgPercentPerDay = result.avgPercentPerDay;
+        bestStrategy = {
+          entryPercent: entryPercent.toFixed(1),
+          exitPercent: exitPercent.toFixed(1),
+          avgPercentPerDay: result.avgPercentPerDay.toFixed(4),
+          totalTrades: result.totalTrades,
+          totalProfit: result.totalProfit.toFixed(2)
+        };
+      }
+    }
+  }
+
+  return bestStrategy;
+}
+
+// Симуляция торговли для конкретной комбинации входа/выхода
+function simulateTrading(data, curvePoints, entryPercent, exitPercent) {
+  let totalProfit = 0;
+  let totalTrades = 0;
+  let inPosition = false;
+  let buyPrice = 0;
+  let buyDay = -1;
+
+  for (let i = 0; i < data.length; i++) {
+    const candle = data[i];
+    const supportPrice = curvePoints[i].price;
+    const entryPrice = supportPrice * (1 + entryPercent / 100);
+    const exitPriceTarget = supportPrice * (1 + exitPercent / 100);
+
+    // Если не в позиции, проверяем условие покупки
+    if (!inPosition) {
+      // Покупаем если Low <= entryPrice
+      if (candle.low <= entryPrice) {
+        inPosition = true;
+        buyPrice = entryPrice;
+        buyDay = i;
+        totalTrades++;
+      }
+    } 
+    // Если в позиции, проверяем условие продажи
+    else {
+      // Не можем продать в день покупки
+      if (i > buyDay) {
+        // Проверяем, можем ли продать (High >= exitPriceTarget)
+        if (candle.high >= exitPriceTarget) {
+          // Продаем
+          const sellPrice = exitPriceTarget;
+          const profit = (sellPrice / buyPrice) * 100 - 100;
+          totalProfit += profit;
+          inPosition = false;
+          buyPrice = 0;
+          buyDay = -1;
+        }
+        // Если это последний день и мы все еще в позиции
+        else if (i === data.length - 1) {
+          // Продаем по цене закрытия
+          const sellPrice = candle.close;
+          const profit = (sellPrice / buyPrice) * 100 - 100;
+          totalProfit += profit;
+          inPosition = false;
+        }
+      }
+      // Если купили в последний день, продаем в тот же день
+      else if (i === buyDay && i === data.length - 1) {
+        const sellPrice = candle.close;
+        const profit = (sellPrice / buyPrice) * 100 - 100;
+        totalProfit += profit;
+        inPosition = false;
+      }
+    }
+  }
+
+  // Если остались в позиции после последнего дня (не должно случиться, но на всякий случай)
+  if (inPosition) {
+    const lastCandle = data[data.length - 1];
+    const sellPrice = lastCandle.close;
+    const profit = (sellPrice / buyPrice) * 100 - 100;
+    totalProfit += profit;
+  }
+
+  // Считаем средний процент в день
+  const avgPercentPerDay = totalProfit / data.length;
+
+  return {
+    avgPercentPerDay,
+    totalTrades,
+    totalProfit
+  };
+}
+
 export function calculateExponentialSupportLine(data) {
   if (!data || data.length < 2) return null;
   
@@ -91,6 +213,9 @@ export function calculateExponentialSupportLine(data) {
     }
   });
   
+  // Оптимизируем стратегию торговли
+  const tradingStrategy = optimizeLevel1TradingStrategy(data, curvePoints);
+  
   return {
     points: [point1, bestPoint2],
     curvePoints: curvePoints,
@@ -98,6 +223,7 @@ export function calculateExponentialSupportLine(data) {
     percentPerDayPercent: ((bestCurveParams.percentPerDay - 1) * 100).toFixed(4), // в процентах
     touches: Math.max(touches, 2),
     startPrice: curvePoints[0].price,
-    endPrice: curvePoints[curvePoints.length - 1].price
+    endPrice: curvePoints[curvePoints.length - 1].price,
+    tradingStrategy: tradingStrategy // Добавляем оптимальную стратегию
   };
 }
