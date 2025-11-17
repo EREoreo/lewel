@@ -14,8 +14,8 @@ function optimizeLevel1TradingStrategy(data, curvePoints) {
   let maxAvgPercentPerDay = -Infinity;
 
   // Перебираем все комбинации
-  for (let entryPercent = 0.3; entryPercent <= 10.0; entryPercent += 0.1) {
-    for (let exitPercent = entryPercent + 0.3; exitPercent <= 20.0; exitPercent += 0.1) {
+  for (let entryPercent = 0.3; entryPercent <= 20.0; entryPercent += 0.1) {
+    for (let exitPercent = entryPercent + 0.3; exitPercent <= 30.0; exitPercent += 0.1) {
       
       // Проверяем, достигает ли цена выхода локального максимума
       const maxSupportPrice = Math.max(...curvePoints.map(p => p.price));
