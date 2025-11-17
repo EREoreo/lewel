@@ -65,7 +65,7 @@ export async function POST(request) {
         }));
 
         if (stockData.length === 0) {
-          results.push([ticker, 'Нет данных', '', '', '', '', '', '', '']);
+          results.push([ticker, 'Нет данных', '', '', '', '', '', '', '', '']);
           continue;
         }
 
@@ -78,7 +78,7 @@ export async function POST(request) {
         }
 
         if (!analysisResult) {
-          results.push([ticker, 'Не найдено', '', '', '', '', '', '', '']);
+          results.push([ticker, 'Не найдено', '', '', '', '', '', '', '', '']);
           continue;
         }
 
@@ -95,12 +95,13 @@ export async function POST(request) {
           analysisResult.percentPerDayPercent + '%',
           strategy ? strategy.avgPercentPerDay + '%' : 'N/A',
           strategy ? strategy.entryPercent + '%' : 'N/A',
-          strategy ? strategy.exitPercent + '%' : 'N/A'
+          strategy ? strategy.exitPercent + '%' : 'N/A',
+          strategy ? `${strategy.totalTrades}/${stockData.length}` : 'N/A'
         ]);
 
       } catch (error) {
         console.error(`Error processing ${ticker}:`, error);
-        results.push([ticker, 'Ошибка', '', '', '', '', '', '', '']);
+        results.push([ticker, 'Ошибка', '', '', '', '', '', '', '', '']);
       }
     }
 
@@ -117,7 +118,8 @@ export async function POST(request) {
         'Процент в день',
         'Средний % в день',
         '% для входа',
-        '% для выхода'
+        '% для выхода',
+        'Трейды/Дни'
       ],
       ...results
     ]);
