@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { calculateExponentialSupportLine } from '../lib/level1Analysis';
+import { calculateExponentialSupportLine, calculateExponentialSupportLineWithTest } from '../lib/level1Analysis';
 import * as XLSX from 'xlsx';
 
-export default function Level1Chart({ data, ticker }) {
+export default function Level1Chart({ data, ticker, testPeriodDays = null, point1MaxDay = null, point2MinDay = null, minTradesPercent = 0 }) {
   const canvasRef = useRef(null);
   const [supportLine, setSupportLine] = useState(null);
   const [hoveredCandle, setHoveredCandle] = useState(null);
@@ -14,31 +14,65 @@ export default function Level1Chart({ data, ticker }) {
 
     const point1 = supportLine.points[0];
     const point2 = supportLine.points[1];
-    const strategy = supportLine.tradingStrategy;
+    const strategy = supportLine.testStrategy || supportLine.tradingStrategy;
 
-    // Создаем данные для Excel в одну строку
-    const excelData = [
-      [
-        ticker, // A1
-        point1.price.toFixed(2), // A2
-        point2.price.toFixed(2), // A3
-        point1.index + 1, // Номер дня 1
-        point2.index + 1, // Номер дня 2
-        supportLine.percentPerDayPercent + '%', // Процент в день
-        strategy ? strategy.avgPercentPerDay + '%' : 'N/A', // Средний % в день (торговля)
-        strategy ? strategy.entryPercent + '%' : 'N/A', // % для входа
-        strategy ? strategy.exitPercent + '%' : 'N/A' // % для выхода
-      ]
-    ];
+    let excelData;
+    if (supportLine.testPeriodDays) {
+      // Режим с разделением на участки
+      excelData = [
+        ['Тикер', ticker],
+        ['', ''],
+        ['ТЕСТИРУЕМЫЙ УЧАСТОК'],
+        ['Точка 1 (цена)', point1.price.toFixed(2)],
+        ['Точка 2 (цена)', point2.price.toFixed(2)],
+        ['День 1', point1.index + 1],
+        ['День 2', point2.index + 1],
+        ['Процент в день', supportLine.percentPerDayPercent + '%'],
+        ['', ''],
+        ['ОПТИМАЛЬНАЯ СТРАТЕГИЯ (тест)'],
+        ['Средний % в день', strategy?.avgPercentPerDay + '%' || 'N/A'],
+        ['% для входа', strategy?.entryPercent + '%' || 'N/A'],
+        ['% для выхода', strategy?.exitPercent + '%' || 'N/A'],
+        ['Трейды (чистые)', strategy?.totalTrades || 'N/A'],
+        ['Всего дней', strategy?.totalDays || 'N/A'],
+        ['Закрыто по факту', strategy?.hasFactClose || 0],
+        ['Процент сделок', strategy?.tradesPercent + '%' || 'N/A'],
+        ['', ''],
+        ['ИССЛЕДУЕМЫЙ УЧАСТОК'],
+        ['Средний % в день', supportLine.researchStrategy?.avgPercentPerDay + '%' || 'N/A'],
+        ['Трейды (чистые)', supportLine.researchStrategy?.totalTrades || 'N/A'],
+        ['Всего дней', supportLine.researchStrategy?.totalDays || 'N/A'],
+        ['Закрыто по факту', supportLine.researchStrategy?.hasFactClose || 0],
+        ['Процент сделок', supportLine.researchStrategy?.tradesPercent + '%' || 'N/A'],
+        ['Общая прибыль', supportLine.researchStrategy?.totalProfit + '%' || 'N/A'],
+        ['Пересечение?', supportLine.hasCrossing ? 'Да' : 'Нет'],
+        ['', ''],
+        ['ПРОЦЕНТ ПОХОЖЕСТИ', supportLine.similarityPercent + '%']
+      ];
+    } else {
+      // Обычный режим
+      excelData = [
+        [
+          ticker,
+          point1.price.toFixed(2),
+          point2.price.toFixed(2),
+          point1.index + 1,
+          point2.index + 1,
+          supportLine.percentPerDayPercent + '%',
+          strategy ? strategy.avgPercentPerDay + '%' : 'N/A',
+          strategy ? strategy.entryPercent + '%' : 'N/A',
+          strategy ? strategy.exitPercent + '%' : 'N/A',
+          strategy ? strategy.totalTrades : 'N/A', // Трейды
+          strategy ? strategy.totalDays : 'N/A', // Всего дней
+          strategy ? strategy.hasFactClose : 0, // Закрыто по факту
+          strategy ? strategy.tradesPercent + '%' : 'N/A' // Процент сделок
+        ]
+      ];
+    }
 
-    // Создаем рабочую книгу
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(excelData);
-
-    // Добавляем лист в книгу
     XLSX.utils.book_append_sheet(wb, ws, 'Level1 Support');
-
-    // Скачиваем файл
     XLSX.writeFile(wb, `${ticker}_level1_support.xlsx`);
   };
 
@@ -92,11 +126,36 @@ export default function Level1Chart({ data, ticker }) {
     }
 
     // Рассчитываем экспоненциальную линию поддержки
-    const support = calculateExponentialSupportLine(data);
+    const support = testPeriodDays 
+      ? calculateExponentialSupportLineWithTest(data, testPeriodDays, point1MaxDay, point2MinDay, minTradesPercent)
+      : calculateExponentialSupportLine(data, point1MaxDay, point2MinDay, minTradesPercent);
     setSupportLine(support);
+
+    // Рисуем красную разделительную линию, если есть разделение
+    if (support && support.testPeriodDays) {
+      const dividerX = indexToX(support.testPeriodDays);
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(dividerX, padding);
+      ctx.lineTo(dividerX, canvas.height - padding);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      
+      // Подписи участков
+      ctx.fillStyle = '#3b82f6';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('тестируемый участок', dividerX / 2 + padding / 2, padding - 10);
+      
+      ctx.fillStyle = '#10b981';
+      ctx.fillText('исследуемый участок', dividerX + (canvas.width - padding - dividerX) / 2, padding - 10);
+    }
 
     // Рисуем экспоненциальную кривую поддержки
     if (support && support.curvePoints) {
+      // Основная линия (синяя)
       ctx.strokeStyle = '#2563eb';
       ctx.lineWidth = 3;
       ctx.beginPath();
@@ -114,10 +173,31 @@ export default function Level1Chart({ data, ticker }) {
       
       ctx.stroke();
       
+      // Если есть пересечение, рисуем красным после точки пересечения
+      if (support.hasCrossing && support.researchEndIndex < data.length - 1) {
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        
+        for (let i = support.researchEndIndex + 1; i < support.curvePoints.length; i++) {
+          const point = support.curvePoints[i];
+          const x = indexToX(point.index);
+          const y = priceToY(point.price);
+          
+          if (i === support.researchEndIndex + 1) {
+            const prevPoint = support.curvePoints[i - 1];
+            ctx.moveTo(indexToX(prevPoint.index), priceToY(prevPoint.price));
+          }
+          ctx.lineTo(x, y);
+        }
+        
+        ctx.stroke();
+      }
+      
       ctx.fillStyle = '#2563eb';
       ctx.font = 'bold 12px sans-serif';
       ctx.textAlign = 'left';
-      ctx.fillText('Support (Exponential)', canvas.width - padding + 10, priceToY(support.endPrice) + 4);
+      ctx.fillText('Support', canvas.width - padding + 10, priceToY(support.endPrice) + 4);
     }
 
     // Рисуем свечи
@@ -167,7 +247,7 @@ export default function Level1Chart({ data, ticker }) {
 
     canvas.addEventListener('mousemove', handleMouseMove);
     return () => canvas.removeEventListener('mousemove', handleMouseMove);
-  }, [data]);
+  }, [data, testPeriodDays, point1MaxDay, point2MinDay, minTradesPercent]);
 
   return (
     <div className="relative">
@@ -180,7 +260,7 @@ export default function Level1Chart({ data, ticker }) {
       {hoveredCandle && (
         <div className="absolute top-4 left-4 bg-white p-3 rounded-lg shadow-lg border border-gray-200 text-sm">
           <div className="font-semibold mb-1">
-            {new Date(hoveredCandle.date).toLocaleDateString('ru-RU')}
+            {new Date(hoveredCandle.date).toLocaleDateString('ru-RU')} (День {hoveredCandle.index + 1})
           </div>
           <div className="space-y-0.5 text-xs">
             <div className="text-black">Open: ${hoveredCandle.open.toFixed(2)}</div>
@@ -207,8 +287,118 @@ export default function Level1Chart({ data, ticker }) {
             </button>
           </div>
 
-          {/* Новый блок с оптимальной стратегией */}
-          {supportLine.tradingStrategy && (
+          {/* Процент похожести */}
+          {supportLine.testPeriodDays && supportLine.similarityPercent && (
+            <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border-2 border-purple-300">
+              <h4 className="font-semibold text-lg mb-2 text-purple-900">🎯 Процент похожести:</h4>
+              <div className="text-4xl font-bold text-purple-600 text-center">
+                {supportLine.similarityPercent}%
+              </div>
+              <div className="text-sm text-gray-600 text-center mt-2">
+                (Исследуемый участок / Тестируемый участок) × 100
+              </div>
+            </div>
+          )}
+
+          {/* Тестируемый участок */}
+          {supportLine.testStrategy && (
+            <div className="p-4 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg border-2 border-blue-300">
+              <h4 className="font-semibold text-lg mb-3 text-blue-900">🔬 Тестируемый участок (дни 1-{supportLine.testPeriodDays}):</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">Средний % в день</div>
+                  <div className="text-2xl font-bold text-blue-600">
+                    {supportLine.testStrategy.avgPercentPerDay}%
+                  </div>
+                </div>
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">Трейды (чистые)</div>
+                  <div className="text-2xl font-bold text-blue-600">
+                    {supportLine.testStrategy.totalTrades}
+                  </div>
+                </div>
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">Всего дней</div>
+                  <div className="text-xl font-bold text-gray-700">
+                    {supportLine.testStrategy.totalDays}
+                  </div>
+                </div>
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">Закрыто по факту</div>
+                  <div className={`text-xl font-bold ${supportLine.testStrategy.hasFactClose ? 'text-orange-600' : 'text-green-600'}`}>
+                    {supportLine.testStrategy.hasFactClose}
+                  </div>
+                </div>
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">Процент сделок</div>
+                  <div className="text-xl font-bold text-purple-600">
+                    {supportLine.testStrategy.tradesPercent}%
+                  </div>
+                </div>
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">% для входа</div>
+                  <div className="text-lg font-bold text-purple-600">
+                    +{supportLine.testStrategy.entryPercent}%
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Исследуемый участок */}
+          {supportLine.researchStrategy && (
+            <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg border-2 border-emerald-300">
+              <h4 className="font-semibold text-lg mb-3 text-emerald-900">
+                🧪 Исследуемый участок (дни {supportLine.testPeriodDays + 1}-{supportLine.researchEndIndex + 1}):
+              </h4>
+              {supportLine.hasCrossing && (
+                <div className="mb-3 p-2 bg-red-100 border border-red-300 rounded text-sm text-red-800">
+                  ⚠️ Линия пересекла свечу - расчеты до дня {supportLine.researchEndIndex + 1}
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">Средний % в день</div>
+                  <div className="text-2xl font-bold text-emerald-600">
+                    {supportLine.researchStrategy.avgPercentPerDay}%
+                  </div>
+                </div>
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">Трейды (чистые)</div>
+                  <div className="text-2xl font-bold text-blue-600">
+                    {supportLine.researchStrategy.totalTrades}
+                  </div>
+                </div>
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">Всего дней</div>
+                  <div className="text-xl font-bold text-gray-700">
+                    {supportLine.researchStrategy.totalDays}
+                  </div>
+                </div>
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">Закрыто по факту</div>
+                  <div className={`text-xl font-bold ${supportLine.researchStrategy.hasFactClose ? 'text-orange-600' : 'text-green-600'}`}>
+                    {supportLine.researchStrategy.hasFactClose}
+                  </div>
+                </div>
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">Процент сделок</div>
+                  <div className="text-xl font-bold text-purple-600">
+                    {supportLine.researchStrategy.tradesPercent}%
+                  </div>
+                </div>
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">Общая прибыль</div>
+                  <div className="text-xl font-bold text-green-600">
+                    {supportLine.researchStrategy.totalProfit}%
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Стандартная стратегия (если нет разделения) */}
+          {supportLine.tradingStrategy && !supportLine.testPeriodDays && (
             <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg border-2 border-emerald-300">
               <h4 className="font-semibold text-lg mb-3 text-emerald-900">🎯 Оптимальная торговая стратегия:</h4>
               <div className="grid grid-cols-2 gap-4">
@@ -219,9 +409,27 @@ export default function Level1Chart({ data, ticker }) {
                   </div>
                 </div>
                 <div className="bg-white p-3 rounded-lg shadow-sm">
-                  <div className="text-xs text-gray-600 mb-1">Всего сделок</div>
+                  <div className="text-xs text-gray-600 mb-1">Трейды (чистые)</div>
                   <div className="text-2xl font-bold text-blue-600">
                     {supportLine.tradingStrategy.totalTrades}
+                  </div>
+                </div>
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">Всего дней</div>
+                  <div className="text-xl font-bold text-gray-700">
+                    {supportLine.tradingStrategy.totalDays}
+                  </div>
+                </div>
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">Закрыто по факту</div>
+                  <div className={`text-xl font-bold ${supportLine.tradingStrategy.hasFactClose ? 'text-orange-600' : 'text-green-600'}`}>
+                    {supportLine.tradingStrategy.hasFactClose}
+                  </div>
+                </div>
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">Процент сделок</div>
+                  <div className="text-xl font-bold text-purple-600">
+                    {supportLine.tradingStrategy.tradesPercent}%
                   </div>
                 </div>
                 <div className="bg-white p-3 rounded-lg shadow-sm">

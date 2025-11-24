@@ -11,6 +11,11 @@ export async function POST(request) {
     const startDate = formData.get('startDate');
     const endDate = formData.get('endDate');
     const analysisType = formData.get('analysisType'); // 'level1' или 'level2'
+    
+    // НОВЫЕ ПАРАМЕТРЫ
+    const point1MaxDay = formData.get('point1MaxDay');
+    const point2MinDay = formData.get('point2MinDay');
+    const minTradesPercent = formData.get('minTradesPercent');
 
     if (!file || !startDate || !endDate) {
       return NextResponse.json(
@@ -65,20 +70,28 @@ export async function POST(request) {
         }));
 
         if (stockData.length === 0) {
-          results.push([ticker, 'Нет данных', '', '', '', '', '', '', '', '']);
+          // НЕ добавляем строку если нет данных
+          console.log(`${ticker}: Нет данных - пропускаем`);
           continue;
         }
+
+        // Парсим параметры фильтров
+        const p1MaxDay = point1MaxDay ? parseInt(point1MaxDay) : null;
+        const p2MinDay = point2MinDay ? parseInt(point2MinDay) : null;
+        const minTrades = minTradesPercent ? parseFloat(minTradesPercent) : 0;
 
         // Выбираем тип анализа
         let analysisResult;
         if (analysisType === 'level1') {
-          analysisResult = calculateExponentialSupportLine(stockData);
+          analysisResult = calculateExponentialSupportLine(stockData, p1MaxDay, p2MinDay, minTrades);
         } else {
-          analysisResult = calculateExponentialResistanceLine(stockData);
+          analysisResult = calculateExponentialResistanceLine(stockData, p1MaxDay, p2MinDay, minTrades);
         }
 
+        // ВАЖНО: Если analysisResult === null, это значит точки не прошли фильтры
+        // НЕ добавляем строку, просто пропускаем
         if (!analysisResult) {
-          results.push([ticker, 'Не найдено', '', '', '', '', '', '', '', '']);
+          console.log(`${ticker}: Не прошел фильтры - пропускаем`);
           continue;
         }
 
@@ -86,6 +99,7 @@ export async function POST(request) {
         const point2 = analysisResult.points[1];
         const strategy = analysisResult.tradingStrategy;
 
+        // НОВАЯ СТРУКТУРА: раздельные колонки вместо дроби
         results.push([
           ticker,
           point1.price.toFixed(2),
@@ -96,13 +110,27 @@ export async function POST(request) {
           strategy ? strategy.avgPercentPerDay + '%' : 'N/A',
           strategy ? strategy.entryPercent + '%' : 'N/A',
           strategy ? strategy.exitPercent + '%' : 'N/A',
-          strategy ? `${strategy.totalTrades}/${stockData.length}` : 'N/A'
+          strategy ? strategy.totalTrades : 'N/A', // Трейды (чистые)
+          strategy ? strategy.totalDays : 'N/A', // Всего дней
+          strategy ? strategy.hasFactClose : 0, // Закрыто по факту (0 или 1)
+          strategy ? strategy.tradesPercent + '%' : 'N/A' // Процент сделок
         ]);
+
+        console.log(`${ticker}: ✅ Обработан успешно`);
 
       } catch (error) {
         console.error(`Error processing ${ticker}:`, error);
-        results.push([ticker, 'Ошибка', '', '', '', '', '', '', '', '']);
+        // Ошибка при загрузке - тоже НЕ добавляем
+        continue;
       }
+    }
+
+    // Если нет результатов
+    if (results.length === 0) {
+      return NextResponse.json(
+        { error: 'Ни один тикер не прошел фильтры или не были найдены данные' },
+        { status: 400 }
+      );
     }
 
     // Создаем новый Excel файл с результатами
@@ -119,7 +147,10 @@ export async function POST(request) {
         'Средний % в день',
         '% для входа',
         '% для выхода',
-        'Трейды/Дни'
+        'Трейды', // НОВОЕ: отдельная колонка
+        'Всего дней', // НОВОЕ: отдельная колонка
+        'Закрыто по факту', // НОВОЕ: 0 или 1
+        'Процент сделок' // НОВОЕ: отдельная колонка
       ],
       ...results
     ]);
