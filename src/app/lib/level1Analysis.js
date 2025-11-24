@@ -265,6 +265,12 @@ export function calculateExponentialSupportLine(data, point1MaxDay = null, point
   // Оптимизируем стратегию торговли с учетом минимального процента сделок
   const tradingStrategy = optimizeLevel1TradingStrategy(data, curvePoints, minTradesPercent);
   
+  // НОВОЕ: Если стратегия не найдена (не прошел фильтр % сделок) - возвращаем null
+  if (!tradingStrategy && minTradesPercent > 0) {
+    console.log(`❌ Не найдена стратегия с процентом сделок >= ${minTradesPercent}%`);
+    return null;
+  }
+  
   return {
     points: [point1, bestPoint2],
     curvePoints: curvePoints,

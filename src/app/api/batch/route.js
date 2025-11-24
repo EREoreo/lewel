@@ -88,16 +88,25 @@ export async function POST(request) {
           analysisResult = calculateExponentialResistanceLine(stockData, p1MaxDay, p2MinDay, minTrades);
         }
 
-        // ВАЖНО: Если analysisResult === null, это значит точки не прошли фильтры
-        // НЕ добавляем строку, просто пропускаем
+        // ВАЖНО: Если analysisResult === null, это значит НЕ прошли фильтры
+        // Возможные причины:
+        // 1. Точка 1 не в нужном диапазоне
+        // 2. Точка 2 не в последних N днях
+        // 3. Не найдена стратегия с нужным % сделок
         if (!analysisResult) {
-          console.log(`${ticker}: Не прошел фильтры - пропускаем`);
+          console.log(`${ticker}: ❌ Не прошел фильтры - строка удалена`);
           continue;
         }
 
         const point1 = analysisResult.points[0];
         const point2 = analysisResult.points[1];
         const strategy = analysisResult.tradingStrategy;
+
+        // КРИТИЧНО: Если стратегии нет - не добавляем строку
+        if (!strategy) {
+          console.log(`${ticker}: ❌ Стратегия не найдена - строка удалена`);
+          continue;
+        }
 
         // НОВАЯ СТРУКТУРА: раздельные колонки вместо дроби
         results.push([
@@ -107,13 +116,13 @@ export async function POST(request) {
           point1.index + 1,
           point2.index + 1,
           analysisResult.percentPerDayPercent + '%',
-          strategy ? strategy.avgPercentPerDay + '%' : 'N/A',
-          strategy ? strategy.entryPercent + '%' : 'N/A',
-          strategy ? strategy.exitPercent + '%' : 'N/A',
-          strategy ? strategy.totalTrades : 'N/A', // Трейды (чистые)
-          strategy ? strategy.totalDays : 'N/A', // Всего дней
-          strategy ? strategy.hasFactClose : 0, // Закрыто по факту (0 или 1)
-          strategy ? strategy.tradesPercent + '%' : 'N/A' // Процент сделок
+          strategy.avgPercentPerDay + '%',
+          strategy.entryPercent + '%',
+          strategy.exitPercent + '%',
+          strategy.totalTrades, // Трейды (чистые)
+          strategy.totalDays, // Всего дней
+          strategy.hasFactClose, // Закрыто по факту (0 или 1)
+          strategy.tradesPercent + '%' // Процент сделок
         ]);
 
         console.log(`${ticker}: ✅ Обработан успешно`);
