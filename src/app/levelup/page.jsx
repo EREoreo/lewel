@@ -72,12 +72,18 @@ export default function LevelUpPage() {
             Level2
           </button>
 
-          <button 
+          <button
   onClick={() => router.push('/history')}
   className="px-8 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full font-medium transition-colors"
 >
   История
 </button>
+          <button
+            onClick={() => router.push('/spiski')}
+            className="px-8 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full font-medium transition-colors"
+          >
+            Списки
+          </button>
         </div>
       </div>
 

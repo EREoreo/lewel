@@ -160,10 +160,16 @@ export default function HistoryPage() {
           >
             Level 2
           </button>
-          <button 
+          <button
             className="px-8 py-3 bg-indigo-500 text-white rounded-full font-medium shadow-lg"
           >
             История
+          </button>
+          <button
+            onClick={() => router.push('/spiski')}
+            className="px-8 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full font-medium transition-colors"
+          >
+            Списки
           </button>
         </div>
       </div>
