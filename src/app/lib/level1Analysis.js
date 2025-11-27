@@ -2,7 +2,7 @@
 function simulateTrading(data, curvePoints, entryPercent, exitPercent) {
   let totalProfit = 0;
   let cleanTrades = 0; // Чистые сделки (закрытые НЕ в последний день)
-  let hasFactClose = false; // Есть ли сделка закрытая в последний день
+  let hasFactClose = 0; // Есть ли сделка закрытая по факту
   let inPosition = false;
   let buyPrice = 0;
   let buyDay = -1;
@@ -24,54 +24,46 @@ function simulateTrading(data, curvePoints, entryPercent, exitPercent) {
     } 
     // Если в позиции, проверяем условие продажи
     else {
-      // Не можем продать в день покупки
-      if (i > buyDay) {
-        // Проверяем, можем ли продать (High >= exitPriceTarget)
-        if (candle.high >= exitPriceTarget) {
-          // Продаем
-          const sellPrice = exitPriceTarget;
-          const profit = (sellPrice / buyPrice) * 100 - 100;
-          totalProfit += profit;
-          
-          // Проверяем, это последний день или нет
-          if (i === data.length - 1) {
-            hasFactClose = true; // Закрыто в последний день
-          } else {
-            cleanTrades++; // Чистая сделка
-          }
-          
-          inPosition = false;
-          buyPrice = 0;
-          buyDay = -1;
-        }
-        // Если это последний день и мы все еще в позиции
-        else if (i === data.length - 1) {
-          // Продаем по цене закрытия
-          const sellPrice = candle.close;
-          const profit = (sellPrice / buyPrice) * 100 - 100;
-          totalProfit += profit;
-          hasFactClose = true; // Закрыто по факту в последний день
-          inPosition = false;
-        }
+      const isLastDay = (i === data.length - 1);
+      
+      // КРИТИЧНО: Не продаем в день покупки (кроме случая когда покупка в последний день)
+      if (i === buyDay && !isLastDay) {
+        continue; // Пропускаем этот день
       }
-      // Если купили в последний день, продаем в тот же день
-      else if (i === buyDay && i === data.length - 1) {
+      
+      // Проверяем нормальный выход (High >= exitPriceTarget)
+      const normalExit = candle.high >= exitPriceTarget;
+      
+      if (normalExit) {
+        // ✅ НОРМАЛЬНЫЙ ВЫХОД - продаем по целевой цене
+        const sellPrice = exitPriceTarget;
+        const profit = (sellPrice / buyPrice) * 100 - 100;
+        totalProfit += profit;
+        
+        if (isLastDay) {
+          // Вышли нормально, но в последний день - это НЕ "по факту"
+          cleanTrades++;
+        } else {
+          // Вышли нормально до последнего дня
+          cleanTrades++;
+        }
+        
+        inPosition = false;
+        buyPrice = 0;
+        buyDay = -1;
+      }
+      else if (isLastDay) {
+        // ⚠️ ВЫХОД ПО ФАКТУ - не достигли цели, продаем по close
         const sellPrice = candle.close;
         const profit = (sellPrice / buyPrice) * 100 - 100;
         totalProfit += profit;
-        hasFactClose = true; // Закрыто по факту
+        hasFactClose = 1; // Закрытие по факту
+        
         inPosition = false;
+        buyPrice = 0;
+        buyDay = -1;
       }
     }
-  }
-
-  // Если остались в позиции после последнего дня
-  if (inPosition) {
-    const lastCandle = data[data.length - 1];
-    const sellPrice = lastCandle.close;
-    const profit = (sellPrice / buyPrice) * 100 - 100;
-    totalProfit += profit;
-    hasFactClose = true; // Закрыто по факту
   }
 
   // Считаем средний процент в день
@@ -79,8 +71,8 @@ function simulateTrading(data, curvePoints, entryPercent, exitPercent) {
 
   return {
     avgPercentPerDay,
-    cleanTrades, // НОВОЕ: только чистые трейды
-    hasFactClose, // НОВОЕ: есть ли закрытие по факту
+    cleanTrades, // Только чистые трейды
+    hasFactClose, // 0 или 1
     totalProfit
   };
 }
@@ -134,7 +126,7 @@ function optimizeLevel1TradingStrategy(data, curvePoints, minTradesPercent = 0) 
             avgPercentPerDay: result.avgPercentPerDay.toFixed(4),
             totalTrades: result.cleanTrades, // ИЗМЕНЕНО: только чистые трейды
             totalDays: data.length,
-            hasFactClose: result.hasFactClose ? 1 : 0,
+            hasFactClose: result.hasFactClose,
             tradesPercent: tradesPercent.toFixed(2),
             totalProfit: result.totalProfit.toFixed(2)
           };
@@ -357,7 +349,7 @@ export function calculateExponentialSupportLineWithTest(data, testPeriodDays, po
       avgPercentPerDay: result.avgPercentPerDay.toFixed(4),
       totalTrades: result.cleanTrades,
       totalDays: researchDataForCalc.length,
-      hasFactClose: result.hasFactClose ? 1 : 0,
+      hasFactClose: result.hasFactClose,
       tradesPercent: tradesPercent.toFixed(2),
       totalProfit: result.totalProfit.toFixed(2)
     };
