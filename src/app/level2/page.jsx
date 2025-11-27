@@ -12,6 +12,13 @@ export default function Level2Page() {
   const [ticker, setTicker] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  
+  // НОВЫЕ ПОЛЯ
+  const [testPeriodDays, setTestPeriodDays] = useState('');
+  const [point1MaxDay, setPoint1MaxDay] = useState('');
+  const [point2MinDay, setPoint2MinDay] = useState('');
+  const [minTradesPercent, setMinTradesPercent] = useState('');
+  
   const [chartData, setChartData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -44,6 +51,11 @@ export default function Level2Page() {
       formData.append('startDate', startDate);
       formData.append('endDate', endDate);
       formData.append('analysisType', 'level2');
+      
+      // НОВЫЕ ПАРАМЕТРЫ
+      if (point1MaxDay) formData.append('point1MaxDay', point1MaxDay);
+      if (point2MinDay) formData.append('point2MinDay', point2MinDay);
+      if (minTradesPercent) formData.append('minTradesPercent', minTradesPercent);
 
       const response = await fetch('/api/batch', {
         method: 'POST',
@@ -91,6 +103,21 @@ export default function Level2Page() {
       if (!data || data.length === 0) {
         throw new Error('Данные не найдены для указанного периода');
       }
+      
+      // Проверка точки 1
+      if (point1MaxDay && parseInt(point1MaxDay) > data.length) {
+        throw new Error(`Точка 1 до дня (${point1MaxDay}) не может быть больше общего количества дней (${data.length})`);
+      }
+      
+      // Проверка точки 2
+      if (point2MinDay && parseInt(point2MinDay) > data.length) {
+        throw new Error(`Точка 2 от конца (${point2MinDay}) не может быть больше общего количества дней (${data.length})`);
+      }
+      
+      // Проверка тестового периода
+      if (testPeriodDays && parseInt(testPeriodDays) >= data.length) {
+        throw new Error(`Тестовый период (${testPeriodDays}) должен быть меньше общего количества дней (${data.length})`);
+      }
 
       setChartData(data);
     } catch (err) {
@@ -135,17 +162,11 @@ export default function Level2Page() {
           >
             История
           </button>
-          <button
-            onClick={() => router.push('/spiski')}
-            className="px-8 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full font-medium transition-colors"
-          >
-            Списки
-          </button>
         </div>
       </div>
 
       <div className="flex">
-        <div className="w-80 bg-[#9A7A7A] min-h-screen p-6">
+        <div className="w-80 bg-[#9A7A7A] min-h-screen p-6 overflow-y-auto">
           <h2 className="text-white text-xl font-semibold mb-4">Level 2 Analysis</h2>
           <p className="text-white/80 text-sm mb-6">Экспоненциальная линия сопротивления</p>
           
@@ -171,15 +192,14 @@ export default function Level2Page() {
             >
               Массовая
             </button>
-            
           </div>
 
           {mode === 'single' ? (
             /* Форма для одного тикера */
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-3">
               <input
                 type="text"
-                placeholder="тикер"
+                placeholder="Тикер"
                 value={ticker}
                 onChange={(e) => setTicker(e.target.value.toUpperCase())}
                 className="w-full px-4 py-2 rounded-lg bg-gray-200 text-gray-800 placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-400"
@@ -199,6 +219,78 @@ export default function Level2Page() {
                 className="w-full px-4 py-2 rounded-lg bg-gray-200 text-gray-800 focus:outline-none focus:ring-2 focus:ring-orange-400"
               />
 
+              {/* ПОЛЕ ТЕСТОВОГО ПЕРИОДА */}
+              <div className="border-t border-white/20 pt-3 mt-3">
+                <p className="text-white text-xs font-semibold mb-3">📅 Разделение периода</p>
+                
+                <div className="relative mb-3">
+                  <label className="block text-white text-xs font-medium mb-1">
+                    Тестовый период (дней)
+                    <span className="text-white/60 text-xs ml-2">необязательно</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="напр. 30 (первые 30 дней = тест)"
+                    value={testPeriodDays}
+                    onChange={(e) => setTestPeriodDays(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-gray-200 text-gray-800 placeholder-gray-500 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  />
+                </div>
+              </div>
+
+              {/* НОВЫЕ ПОЛЯ */}
+              <div className="border-t border-white/20 pt-3 mt-3">
+                <p className="text-white text-xs font-semibold mb-3">🎯 Фильтры точек</p>
+                
+                <div className="relative mb-3">
+                  <label className="block text-white text-xs font-medium mb-1">
+                    Точка 1 до дня
+                    <span className="text-white/60 text-xs ml-2">необязательно</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="напр. 10 (точка 1 в днях 1-10)"
+                    value={point1MaxDay}
+                    onChange={(e) => setPoint1MaxDay(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-gray-200 text-gray-800 placeholder-gray-500 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  />
+                </div>
+
+                <div className="relative mb-3">
+                  <label className="block text-white text-xs font-medium mb-1">
+                    Точка 2 от конца (дней)
+                    <span className="text-white/60 text-xs ml-2">необязательно</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="напр. 3 (точка 2 в последних 3 днях)"
+                    value={point2MinDay}
+                    onChange={(e) => setPoint2MinDay(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-gray-200 text-gray-800 placeholder-gray-500 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  />
+                </div>
+
+                <div className="relative">
+                  <label className="block text-white text-xs font-medium mb-1">
+                    Мин. процент сделок (%)
+                    <span className="text-white/60 text-xs ml-2">необязательно</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    placeholder="напр. 15 (15% сделок минимум)"
+                    value={minTradesPercent}
+                    onChange={(e) => setMinTradesPercent(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-gray-200 text-gray-800 placeholder-gray-500 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  />
+                </div>
+              </div>
+
               <button
                 type="submit"
                 disabled={loading}
@@ -211,7 +303,7 @@ export default function Level2Page() {
             </form>
           ) : (
             /* Форма для массовой обработки */
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div>
                 <label className="block text-white text-sm font-medium mb-2">
                   Загрузить Excel файл
@@ -220,7 +312,7 @@ export default function Level2Page() {
                   type="file"
                   accept=".xlsx,.xls"
                   onChange={handleFileChange}
-                  className="w-full px-4 py-2 rounded-lg bg-gray-200 text-gray-800 text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100"
+                  className="w-full px-4 py-2 rounded-lg bg-gray-200 text-gray-800 text-xs file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100"
                 />
                 {selectedFile && (
                   <p className="text-white text-xs mt-2">
@@ -243,6 +335,40 @@ export default function Level2Page() {
                 className="w-full px-4 py-2 rounded-lg bg-gray-200 text-gray-800 focus:outline-none focus:ring-2 focus:ring-orange-400"
               />
 
+              {/* НОВЫЕ ПОЛЯ ДЛЯ МАССОВОЙ ОБРАБОТКИ */}
+              <div className="border-t border-white/20 pt-3">
+                <p className="text-white text-xs font-semibold mb-3">🎯 Фильтры (необязательно)</p>
+                
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="Точка 1 до дня"
+                  value={point1MaxDay}
+                  onChange={(e) => setPoint1MaxDay(e.target.value)}
+                  className="w-full px-3 py-2 mb-2 rounded-lg bg-gray-200 text-gray-800 placeholder-gray-600 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
+                />
+
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="Точка 2 от конца (дней)"
+                  value={point2MinDay}
+                  onChange={(e) => setPoint2MinDay(e.target.value)}
+                  className="w-full px-3 py-2 mb-2 rounded-lg bg-gray-200 text-gray-800 placeholder-gray-600 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
+                />
+
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  placeholder="Мин. процент сделок (%)"
+                  value={minTradesPercent}
+                  onChange={(e) => setMinTradesPercent(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-gray-200 text-gray-800 placeholder-gray-600 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
+                />
+              </div>
+
               <button
                 onClick={handleBatchProcess}
                 disabled={batchProcessing}
@@ -261,7 +387,7 @@ export default function Level2Page() {
             </div>
           )}
 
-          <div className="mt-8 text-white/80 text-sm">
+          <div className="mt-6 text-white/80 text-xs">
             <p className="font-medium mb-2">Популярные тикеры:</p>
             <div className="space-y-1">
               {['INTC', 'BABA', 'COIN', 'RIVN'].map(t => (
@@ -279,18 +405,16 @@ export default function Level2Page() {
             </div>
           </div>
 
-          {mode === 'batch' && (
-            <div className="mt-8 p-4 bg-white/10 rounded-lg text-white/80 text-xs">
-              <p className="font-semibold mb-2">📝 Формат Excel:</p>
-              <ul className="space-y-1 list-disc list-inside">
-                <li>Первый столбец - тикеры</li>
-                <li>Результат включает процент</li>
-                <li>Автоматическое скачивание</li>
-              </ul>
-            </div>
-          )}
+          <div className="mt-6 p-3 bg-white/10 rounded-lg text-white/80 text-xs">
+            <p className="font-semibold mb-2">🆕 Новые фильтры:</p>
+            <ul className="space-y-1 list-disc list-inside">
+              <li>Точка 1 до дня: в начале</li>
+              <li>Точка 2 от конца: в последних N днях</li>
+              <li>Мин. % сделок: фильтр комбинаций</li>
+            </ul>
+          </div>
 
-          <div className="mt-8 p-4 bg-white/10 rounded-lg text-white/80 text-xs">
+          <div className="mt-4 p-3 bg-white/10 rounded-lg text-white/80 text-xs">
             <p className="font-semibold mb-2">Особенности Level 2:</p>
             <ul className="space-y-1 list-disc list-inside">
               <li>Изогнутая экспоненциальная линия</li>
@@ -322,13 +446,11 @@ export default function Level2Page() {
                   </p>
                   <div className="bg-orange-50 p-4 rounded-lg text-sm text-left">
                     <p className="font-semibold text-orange-900 mb-2">Результат будет содержать:</p>
-                    <ul className="space-y-1 text-orange-700">
-                      <li>• Тикер</li>
-                      <li>• Цена точки 1</li>
-                      <li>• Цена точки 2</li>
-                      <li>• Номер дня 1</li>
-                      <li>• Номер дня 2</li>
-                      <li>• Процент падения в день</li>
+                    <ul className="space-y-1 text-orange-700 text-xs">
+                      <li>• Тикер, Цены точек, Дни точек</li>
+                      <li>• Процент в день</li>
+                      <li>• Трейды, Всего дней, Закрыто по факту</li>
+                      <li>• Процент сделок</li>
                     </ul>
                   </div>
                 </div>
@@ -352,9 +474,23 @@ export default function Level2Page() {
                   </h3>
                   <div className="text-sm text-gray-600">
                     {startDate} - {endDate}
+                    {(point1MaxDay || point2MinDay || minTradesPercent) && (
+                      <div className="text-xs text-orange-600 mt-1">
+                        {point1MaxDay && `Точка1≤${point1MaxDay}`}
+                        {point2MinDay && ` Точка2≥${point2MinDay}`}
+                        {minTradesPercent && ` Мин%≥${minTradesPercent}`}
+                      </div>
+                    )}
                   </div>
                 </div>
-                <Level2Chart data={chartData} ticker={ticker} />
+                <Level2Chart 
+                  data={chartData} 
+                  ticker={ticker}
+                  testPeriodDays={testPeriodDays ? parseInt(testPeriodDays) : null}
+                  point1MaxDay={point1MaxDay ? parseInt(point1MaxDay) : null}
+                  point2MinDay={point2MinDay ? parseInt(point2MinDay) : null}
+                  minTradesPercent={minTradesPercent ? parseFloat(minTradesPercent) : 0}
+                />
               </>
             )}
           </div>
