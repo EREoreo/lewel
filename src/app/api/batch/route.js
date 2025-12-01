@@ -1,8 +1,8 @@
 import yahooFinance from 'yahoo-finance2';
 import { NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
-import { calculateExponentialResistanceLine } from '../../lib/level2Analysis';
-import { calculateExponentialSupportLine } from '../../lib/level1Analysis';
+import { calculateExponentialResistanceLine, calculateExponentialResistanceLineWithTest } from '../../lib/level2Analysis';
+import { calculateExponentialSupportLine, calculateExponentialSupportLineWithTest } from '../../lib/level1Analysis';
 
 export async function POST(request) {
   try {
@@ -12,10 +12,13 @@ export async function POST(request) {
     const endDate = formData.get('endDate');
     const analysisType = formData.get('analysisType'); // 'level1' или 'level2'
     
-    // НОВЫЕ ПАРАМЕТРЫ
+    // ПАРАМЕТРЫ ФИЛЬТРОВ
     const point1MaxDay = formData.get('point1MaxDay');
     const point2MinDay = formData.get('point2MinDay');
     const minTradesPercent = formData.get('minTradesPercent');
+    
+    // НОВОЕ: Тестовый период
+    const testPeriodDays = formData.get('testPeriodDays');
 
     if (!file || !startDate || !endDate) {
       return NextResponse.json(
@@ -44,11 +47,22 @@ export async function POST(request) {
       );
     }
 
+    console.log(`\n🚀 НАЧАЛО МАССОВОЙ ОБРАБОТКИ`);
+    console.log(`Тикеров: ${tickers.length}`);
+    console.log(`Период: ${startDate} - ${endDate}`);
+    console.log(`Тип: ${analysisType}`);
+    console.log(`Тестовый период: ${testPeriodDays || 'НЕТ'} дней`);
+    console.log(`Фильтры: точка1≤${point1MaxDay || 'любой'}, точка2≥${point2MinDay || 'любой'}, %сделок≥${minTradesPercent || 0}%\n`);
+
     // Обрабатываем каждый тикер
     const results = [];
+    let processedCount = 0;
+    let skippedCount = 0;
     
     for (const ticker of tickers) {
       try {
+        console.log(`\n📊 Обработка ${ticker} (${processedCount + skippedCount + 1}/${tickers.length})`);
+        
         // Получаем данные акций
         const start = new Date(startDate);
         const end = new Date(endDate);
@@ -70,69 +84,158 @@ export async function POST(request) {
         }));
 
         if (stockData.length === 0) {
-          // НЕ добавляем строку если нет данных
-          console.log(`${ticker}: Нет данных - пропускаем`);
+          console.log(`  ⚠️ Нет данных - пропускаем`);
+          skippedCount++;
           continue;
         }
+
+        console.log(`  📈 Загружено ${stockData.length} дней данных`);
 
         // Парсим параметры фильтров
         const p1MaxDay = point1MaxDay ? parseInt(point1MaxDay) : null;
         const p2MinDay = point2MinDay ? parseInt(point2MinDay) : null;
         const minTrades = minTradesPercent ? parseFloat(minTradesPercent) : 0;
+        const testPeriod = testPeriodDays ? parseInt(testPeriodDays) : null;
 
-        // Выбираем тип анализа
-        let analysisResult;
-        if (analysisType === 'level1') {
-          analysisResult = calculateExponentialSupportLine(stockData, p1MaxDay, p2MinDay, minTrades);
-        } else {
-          analysisResult = calculateExponentialResistanceLine(stockData, p1MaxDay, p2MinDay, minTrades);
+        // Проверка тестового периода
+        if (testPeriod && testPeriod >= stockData.length) {
+          console.log(`  ⚠️ Тестовый период (${testPeriod}) >= всех дней (${stockData.length}) - пропускаем`);
+          skippedCount++;
+          continue;
         }
 
-        // ВАЖНО: Если analysisResult === null, это значит НЕ прошли фильтры
-        // Возможные причины:
-        // 1. Точка 1 не в нужном диапазоне
-        // 2. Точка 2 не в последних N днях
-        // 3. Не найдена стратегия с нужным % сделок
+        // Выбираем тип анализа и функцию
+        let analysisResult;
+        
+        if (analysisType === 'level1') {
+          // LEVEL 1 - SUPPORT
+          if (testPeriod && testPeriod < stockData.length) {
+            console.log(`  🔬 Используем LEVEL 1 с тестовым периодом`);
+            analysisResult = calculateExponentialSupportLineWithTest(
+              stockData, 
+              testPeriod, 
+              p1MaxDay, 
+              p2MinDay, 
+              minTrades
+            );
+          } else {
+            console.log(`  📊 Используем обычный LEVEL 1`);
+            analysisResult = calculateExponentialSupportLine(
+              stockData, 
+              p1MaxDay, 
+              p2MinDay, 
+              minTrades
+            );
+          }
+        } else {
+          // LEVEL 2 - RESISTANCE
+          if (testPeriod && testPeriod < stockData.length) {
+            console.log(`  🔬 Используем LEVEL 2 с тестовым периодом`);
+            analysisResult = calculateExponentialResistanceLineWithTest(
+              stockData, 
+              testPeriod, 
+              p1MaxDay, 
+              p2MinDay, 
+              minTrades
+            );
+          } else {
+            console.log(`  📊 Используем обычный LEVEL 2`);
+            analysisResult = calculateExponentialResistanceLine(
+              stockData, 
+              p1MaxDay, 
+              p2MinDay, 
+              minTrades
+            );
+          }
+        }
+
+        // Если analysisResult === null, не прошли фильтры
         if (!analysisResult) {
-          console.log(`${ticker}: ❌ Не прошел фильтры - строка удалена`);
+          console.log(`  ❌ Не прошел фильтры - пропускаем`);
+          skippedCount++;
           continue;
         }
 
         const point1 = analysisResult.points[0];
         const point2 = analysisResult.points[1];
-        const strategy = analysisResult.tradingStrategy;
 
-        // КРИТИЧНО: Если стратегии нет - не добавляем строку
+        // Определяем какую стратегию использовать
+        // Если есть testPeriodDays - используем testStrategy, иначе tradingStrategy
+        const strategy = analysisResult.testPeriodDays 
+          ? analysisResult.testStrategy 
+          : analysisResult.tradingStrategy;
+
         if (!strategy) {
-          console.log(`${ticker}: ❌ Стратегия не найдена - строка удалена`);
+          console.log(`  ❌ Стратегия не найдена - пропускаем`);
+          skippedCount++;
           continue;
         }
 
-        // НОВАЯ СТРУКТУРА: раздельные колонки вместо дроби
-        results.push([
-          ticker,
-          point1.price.toFixed(2),
-          point2.price.toFixed(2),
-          point1.index + 1,
-          point2.index + 1,
-          analysisResult.percentPerDayPercent + '%',
-          strategy.avgPercentPerDay + '%',
-          strategy.entryPercent + '%',
-          strategy.exitPercent + '%',
-          strategy.totalTrades, // Трейды (чистые)
-          strategy.totalDays, // Всего дней
-          strategy.hasFactClose, // Закрыто по факту (0 или 1)
-          strategy.tradesPercent + '%' // Процент сделок
-        ]);
+        // ФОРМИРУЕМ СТРОКУ РЕЗУЛЬТАТА
+        if (analysisResult.testPeriodDays) {
+          // Режим с тестовым периодом - расширенный формат
+          results.push([
+            ticker,
+            point1.price.toFixed(2),
+            point2.price.toFixed(2),
+            point1.index + 1,
+            point2.index + 1,
+            analysisResult.percentPerDayPercent + '%',
+            // ТЕСТ
+            strategy.avgPercentPerDay + '%',
+            strategy.entryPercent + '%',
+            strategy.exitPercent + '%',
+            strategy.totalTrades,
+            strategy.totalDays,
+            strategy.hasFactClose,
+            strategy.tradesPercent + '%',
+            // ИССЛЕДОВАНИЕ
+            analysisResult.researchStrategy.avgPercentPerDay + '%',
+            analysisResult.researchStrategy.totalTrades,
+            analysisResult.researchStrategy.totalDays,
+            analysisResult.researchStrategy.hasFactClose,
+            analysisResult.researchStrategy.tradesPercent + '%',
+            analysisResult.researchStrategy.totalProfit + '%',
+            // МЕТРИКИ
+            analysisResult.hasCrossing ? 'Да' : 'Нет',
+            analysisResult.similarityPercent + '%'
+          ]);
+          
+          console.log(`  ✅ Обработан успешно | Схожесть: ${analysisResult.similarityPercent}%`);
+        } else {
+          // Обычный режим - стандартный формат
+          results.push([
+            ticker,
+            point1.price.toFixed(2),
+            point2.price.toFixed(2),
+            point1.index + 1,
+            point2.index + 1,
+            analysisResult.percentPerDayPercent + '%',
+            strategy.avgPercentPerDay + '%',
+            strategy.entryPercent + '%',
+            strategy.exitPercent + '%',
+            strategy.totalTrades,
+            strategy.totalDays,
+            strategy.hasFactClose,
+            strategy.tradesPercent + '%'
+          ]);
+          
+          console.log(`  ✅ Обработан успешно | Средний %: ${strategy.avgPercentPerDay}%`);
+        }
 
-        console.log(`${ticker}: ✅ Обработан успешно`);
+        processedCount++;
 
       } catch (error) {
-        console.error(`Error processing ${ticker}:`, error);
-        // Ошибка при загрузке - тоже НЕ добавляем
+        console.error(`  ❌ Ошибка обработки ${ticker}:`, error.message);
+        skippedCount++;
         continue;
       }
     }
+
+    console.log(`\n📊 ИТОГИ:`);
+    console.log(`Обработано успешно: ${processedCount}`);
+    console.log(`Пропущено: ${skippedCount}`);
+    console.log(`Всего тикеров: ${tickers.length}\n`);
 
     // Если нет результатов
     if (results.length === 0) {
@@ -145,8 +248,40 @@ export async function POST(request) {
     // Создаем новый Excel файл с результатами
     const wb = XLSX.utils.book_new();
     const sheetName = analysisType === 'level1' ? 'Level1 Support' : 'Level2 Resistance';
-    const ws = XLSX.utils.aoa_to_sheet([
-      [
+    
+    // ЗАГОЛОВКИ в зависимости от режима
+    let headers;
+    if (testPeriodDays) {
+      // Расширенные заголовки для режима с тестом
+      headers = [
+        'Тикер', 
+        'Цена точки 1', 
+        'Цена точки 2', 
+        'День 1', 
+        'День 2', 
+        'Процент в день',
+        // ТЕСТ
+        'ТЕСТ: Средний % в день',
+        'ТЕСТ: % для входа',
+        'ТЕСТ: % для выхода',
+        'ТЕСТ: Трейды',
+        'ТЕСТ: Всего дней',
+        'ТЕСТ: Закрыто по факту',
+        'ТЕСТ: Процент сделок',
+        // ИССЛЕДОВАНИЕ
+        'ИССЛ: Средний % в день',
+        'ИССЛ: Трейды',
+        'ИССЛ: Всего дней',
+        'ИССЛ: Закрыто по факту',
+        'ИССЛ: Процент сделок',
+        'ИССЛ: Общая прибыль',
+        // МЕТРИКИ
+        'Пересечение?',
+        'Процент схожести'
+      ];
+    } else {
+      // Стандартные заголовки
+      headers = [
         'Тикер', 
         'Цена точки 1', 
         'Цена точки 2', 
@@ -156,13 +291,18 @@ export async function POST(request) {
         'Средний % в день',
         '% для входа',
         '% для выхода',
-        'Трейды', // НОВОЕ: отдельная колонка
-        'Всего дней', // НОВОЕ: отдельная колонка
-        'Закрыто по факту', // НОВОЕ: 0 или 1
-        'Процент сделок' // НОВОЕ: отдельная колонка
-      ],
-      ...results
-    ]);
+        'Трейды',
+        'Всего дней',
+        'Закрыто по факту',
+        'Процент сделок'
+      ];
+    }
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...results]);
+
+    // Устанавливаем ширину колонок
+    const colWidths = headers.map(() => ({ wch: 15 }));
+    ws['!cols'] = colWidths;
 
     XLSX.utils.book_append_sheet(wb, ws, sheetName);
 

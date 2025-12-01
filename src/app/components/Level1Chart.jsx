@@ -18,18 +18,18 @@ export default function Level1Chart({ data, ticker, testPeriodDays = null, point
 
     let excelData;
     if (supportLine.testPeriodDays) {
-      // Режим с разделением на участки
+      // Режим с разделением на участки - РАСШИРЕННЫЙ ФОРМАТ
       excelData = [
         ['Тикер', ticker],
         ['', ''],
-        ['ТЕСТИРУЕМЫЙ УЧАСТОК'],
+        ['📊 ПАРАМЕТРЫ ЛИНИИ'],
+        ['Точка 1 (день)', point1.index + 1],
         ['Точка 1 (цена)', point1.price.toFixed(2)],
+        ['Точка 2 (день)', point2.index + 1],
         ['Точка 2 (цена)', point2.price.toFixed(2)],
-        ['День 1', point1.index + 1],
-        ['День 2', point2.index + 1],
         ['Процент в день', supportLine.percentPerDayPercent + '%'],
         ['', ''],
-        ['ОПТИМАЛЬНАЯ СТРАТЕГИЯ (тест)'],
+        ['🔬 ТЕСТИРУЕМЫЙ УЧАСТОК (дни 1-' + supportLine.testPeriodDays + ')'],
         ['Средний % в день', strategy?.avgPercentPerDay + '%' || 'N/A'],
         ['% для входа', strategy?.entryPercent + '%' || 'N/A'],
         ['% для выхода', strategy?.exitPercent + '%' || 'N/A'],
@@ -37,17 +37,22 @@ export default function Level1Chart({ data, ticker, testPeriodDays = null, point
         ['Всего дней', strategy?.totalDays || 'N/A'],
         ['Закрыто по факту', strategy?.hasFactClose || 0],
         ['Процент сделок', strategy?.tradesPercent + '%' || 'N/A'],
+        ['Общая прибыль', strategy?.totalProfit + '%' || 'N/A'],
         ['', ''],
-        ['ИССЛЕДУЕМЫЙ УЧАСТОК'],
+        ['🧪 ИССЛЕДУЕМЫЙ УЧАСТОК (дни ' + (supportLine.testPeriodDays + 1) + '-' + (supportLine.researchEndIndex + 1) + ')'],
         ['Средний % в день', supportLine.researchStrategy?.avgPercentPerDay + '%' || 'N/A'],
         ['Трейды (чистые)', supportLine.researchStrategy?.totalTrades || 'N/A'],
         ['Всего дней', supportLine.researchStrategy?.totalDays || 'N/A'],
         ['Закрыто по факту', supportLine.researchStrategy?.hasFactClose || 0],
         ['Процент сделок', supportLine.researchStrategy?.tradesPercent + '%' || 'N/A'],
         ['Общая прибыль', supportLine.researchStrategy?.totalProfit + '%' || 'N/A'],
-        ['Пересечение?', supportLine.hasCrossing ? 'Да' : 'Нет'],
         ['', ''],
-        ['ПРОЦЕНТ ПОХОЖЕСТИ', supportLine.similarityPercent + '%']
+        ['⚠️ ПЕРЕСЕЧЕНИЕ', supportLine.hasCrossing ? 'Да' : 'Нет'],
+        ['', ''],
+        ['🎯 ПРОЦЕНТ ПОХОЖЕСТИ', supportLine.similarityPercent + '%'],
+        ['', ''],
+        ['📝 ФОРМУЛА СХОЖЕСТИ'],
+        ['(Иссл ср% в день / Тест ср% в день) × 100']
       ];
     } else {
       // Обычный режим
@@ -62,10 +67,10 @@ export default function Level1Chart({ data, ticker, testPeriodDays = null, point
           strategy ? strategy.avgPercentPerDay + '%' : 'N/A',
           strategy ? strategy.entryPercent + '%' : 'N/A',
           strategy ? strategy.exitPercent + '%' : 'N/A',
-          strategy ? strategy.totalTrades : 'N/A', // Трейды
-          strategy ? strategy.totalDays : 'N/A', // Всего дней
-          strategy ? strategy.hasFactClose : 0, // Закрыто по факту
-          strategy ? strategy.tradesPercent + '%' : 'N/A' // Процент сделок
+          strategy ? strategy.totalTrades : 'N/A',
+          strategy ? strategy.totalDays : 'N/A',
+          strategy ? strategy.hasFactClose : 0,
+          strategy ? strategy.tradesPercent + '%' : 'N/A'
         ]
       ];
     }
@@ -147,10 +152,10 @@ export default function Level1Chart({ data, ticker, testPeriodDays = null, point
       ctx.fillStyle = '#3b82f6';
       ctx.font = 'bold 12px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('тестируемый участок', dividerX / 2 + padding / 2, padding - 10);
+      ctx.fillText('🔬 тестируемый', dividerX / 2 + padding / 2, padding - 10);
       
       ctx.fillStyle = '#10b981';
-      ctx.fillText('исследуемый участок', dividerX + (canvas.width - padding - dividerX) / 2, padding - 10);
+      ctx.fillText('🧪 исследуемый', dividerX + (canvas.width - padding - dividerX) / 2, padding - 10);
     }
 
     // Рисуем экспоненциальную кривую поддержки
@@ -249,6 +254,25 @@ export default function Level1Chart({ data, ticker, testPeriodDays = null, point
     return () => canvas.removeEventListener('mousemove', handleMouseMove);
   }, [data, testPeriodDays, point1MaxDay, point2MinDay, minTradesPercent]);
 
+  // Функция для определения цвета схожести
+  const getSimilarityColor = (percent) => {
+    const value = parseFloat(percent);
+    if (value >= 90 && value <= 110) return 'text-green-600';
+    if (value >= 70 && value < 90) return 'text-yellow-600';
+    if (value > 110 && value <= 130) return 'text-blue-600';
+    return 'text-red-600';
+  };
+
+  // Функция для определения эмодзи схожести
+  const getSimilarityEmoji = (percent) => {
+    const value = parseFloat(percent);
+    if (value >= 95 && value <= 105) return '🎯';
+    if (value >= 90 && value <= 110) return '✅';
+    if (value >= 70 && value < 90) return '⚠️';
+    if (value > 110 && value <= 130) return '🚀';
+    return '❌';
+  };
+
   return (
     <div className="relative">
       <canvas
@@ -287,15 +311,57 @@ export default function Level1Chart({ data, ticker, testPeriodDays = null, point
             </button>
           </div>
 
-          {/* Процент похожести */}
+          {/* Процент похожести - ГЛАВНЫЙ БЛОК */}
           {supportLine.testPeriodDays && supportLine.similarityPercent && (
-            <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border-2 border-purple-300">
-              <h4 className="font-semibold text-lg mb-2 text-purple-900">🎯 Процент похожести:</h4>
-              <div className="text-4xl font-bold text-purple-600 text-center">
+            <div className="p-6 bg-gradient-to-br from-purple-50 via-pink-50 to-purple-100 rounded-xl border-3 border-purple-400 shadow-xl">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-xl font-bold text-purple-900">
+                  {getSimilarityEmoji(supportLine.similarityPercent)} Процент схожести
+                </h4>
+                <div className="text-xs text-purple-700 bg-white px-3 py-1 rounded-full">
+                  Иссл / Тест × 100
+                </div>
+              </div>
+              <div className={`text-6xl font-black text-center py-4 ${getSimilarityColor(supportLine.similarityPercent)}`}>
                 {supportLine.similarityPercent}%
               </div>
-              <div className="text-sm text-gray-600 text-center mt-2">
-                (Исследуемый участок / Тестируемый участок) × 100
+              <div className="mt-3 text-center text-sm text-purple-800">
+                <div className="flex justify-center gap-4 mt-2">
+                  <div className="bg-white px-3 py-1 rounded-lg">
+                    <span className="text-xs text-gray-600">Тест:</span>
+                    <span className="ml-1 font-semibold">{supportLine.testStrategy?.avgPercentPerDay}%</span>
+                  </div>
+                  <div className="text-2xl text-purple-600">→</div>
+                  <div className="bg-white px-3 py-1 rounded-lg">
+                    <span className="text-xs text-gray-600">Иссл:</span>
+                    <span className="ml-1 font-semibold">{supportLine.researchStrategy?.avgPercentPerDay}%</span>
+                  </div>
+                </div>
+              </div>
+              {/* Интерпретация */}
+              <div className="mt-4 p-3 bg-white rounded-lg text-center">
+                <div className="text-xs font-semibold text-gray-700 mb-1">Интерпретация:</div>
+                {parseFloat(supportLine.similarityPercent) >= 95 && parseFloat(supportLine.similarityPercent) <= 105 && (
+                  <div className="text-sm text-green-700">🎯 Идеальная стабильность!</div>
+                )}
+                {parseFloat(supportLine.similarityPercent) >= 90 && parseFloat(supportLine.similarityPercent) < 95 && (
+                  <div className="text-sm text-green-600">✅ Отличная стабильность</div>
+                )}
+                {parseFloat(supportLine.similarityPercent) > 105 && parseFloat(supportLine.similarityPercent) <= 110 && (
+                  <div className="text-sm text-green-600">✅ Отличная стабильность</div>
+                )}
+                {parseFloat(supportLine.similarityPercent) > 110 && parseFloat(supportLine.similarityPercent) <= 130 && (
+                  <div className="text-sm text-blue-600">🚀 Исследование лучше теста</div>
+                )}
+                {parseFloat(supportLine.similarityPercent) >= 70 && parseFloat(supportLine.similarityPercent) < 90 && (
+                  <div className="text-sm text-yellow-600">⚠️ Приемлемая стабильность</div>
+                )}
+                {parseFloat(supportLine.similarityPercent) < 70 && (
+                  <div className="text-sm text-red-600">❌ Слабая стабильность</div>
+                )}
+                {parseFloat(supportLine.similarityPercent) > 130 && (
+                  <div className="text-sm text-orange-600">⚠️ Возможна аномалия</div>
+                )}
               </div>
             </div>
           )}

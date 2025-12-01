@@ -138,7 +138,7 @@ function optimizeLevel1TradingStrategy(data, curvePoints, minTradesPercent = 0) 
   return bestStrategy;
 }
 
-// ОСНОВНАЯ ФУНКЦИЯ - должна быть определена ПЕРВОЙ
+// ОСНОВНАЯ ФУНКЦИЯ - для одиночной обработки БЕЗ тестового периода
 export function calculateExponentialSupportLine(data, point1MaxDay = null, point2MinDay = null, minTradesPercent = 0) {
   if (!data || data.length < 2) return null;
   
@@ -275,129 +275,212 @@ export function calculateExponentialSupportLine(data, point1MaxDay = null, point
   };
 }
 
-// Новая функция с разделением на тестируемый и исследуемый участок
+// НОВАЯ функция с полным перебором комбинаций и выбором лучшей по схожести
 export function calculateExponentialSupportLineWithTest(data, testPeriodDays, point1MaxDay = null, point2MinDay = null, minTradesPercent = 0) {
   if (!data || data.length < 2) return null;
   if (testPeriodDays >= data.length) {
-    // Если тестовый период больше или равен всем данным, используем старую логику
     return calculateExponentialSupportLine(data, point1MaxDay, point2MinDay, minTradesPercent);
   }
 
-  // Разделяем данные на два участка
+  console.log('\n🔬 НАЧАЛО ПОИСКА ЛУЧШЕЙ КОМБИНАЦИИ (LEVEL 1)');
+  console.log(`Тестовый участок: дни 1-${testPeriodDays}`);
+  console.log(`Исследуемый участок: дни ${testPeriodDays + 1}-${data.length}`);
+  console.log(`Фильтры: точка1≤${point1MaxDay || 'любой'}, точка2≥${point2MinDay || 'любой'}, %сделок≥${minTradesPercent}%`);
+
   const testData = data.slice(0, testPeriodDays);
 
-  console.log('\n🔬 РАЗДЕЛЕНИЕ НА УЧАСТКИ:');
-  console.log(`Тестируемый участок: дни 1-${testPeriodDays} (${testPeriodDays} дней)`);
-  console.log(`Исследуемый участок: дни ${testPeriodDays + 1}-${data.length} (${data.length - testPeriodDays} дней)`);
-
-  // 1. Находим линию поддержки на тестируемом участке
-  const testResult = calculateExponentialSupportLine(testData, point1MaxDay, point2MinDay, minTradesPercent);
-  if (!testResult) return null;
-
-  console.log('\n📊 ТЕСТИРУЕМЫЙ УЧАСТОК:');
-  console.log(`Точка 1: день ${testResult.points[0].index + 1}, цена $${testResult.points[0].price.toFixed(2)}`);
-  console.log(`Точка 2: день ${testResult.points[1].index + 1}, цена $${testResult.points[1].price.toFixed(2)}`);
-  console.log(`Процент в день: ${testResult.percentPerDayPercent}%`);
-  if (testResult.tradingStrategy) {
-    console.log(`Стратегия: ENTER=${testResult.tradingStrategy.entryPercent}%, EXIT=${testResult.tradingStrategy.exitPercent}%`);
-    console.log(`Средний % в день: ${testResult.tradingStrategy.avgPercentPerDay}%`);
-    console.log(`Трейдов: ${testResult.tradingStrategy.totalTrades}, Процент сделок: ${testResult.tradingStrategy.tradesPercent}%`);
-  }
-
-  // 2. Продолжаем линию поддержки на исследуемый участок
-  const fullCurvePoints = [];
-  const basePrice = testResult.points[0].price;
-  const baseIndex = testResult.points[0].index;
-  const percentPerDay = testResult.percentPerDay;
-
-  // Строим кривую для всего периода
-  for (let i = 0; i < data.length; i++) {
-    const price = basePrice * Math.pow(percentPerDay, i - baseIndex);
-    fullCurvePoints.push({ index: i, price });
-  }
-
-  // 3. Проверяем пересечения в исследуемом участке
-  let researchEndIndex = data.length - 1;
-  let hasCrossing = false;
+  // 1. НАХОДИМ ВСЕ ВОЗМОЖНЫЕ КОМБИНАЦИИ ТОЧЕК НА ТЕСТОВОМ УЧАСТКЕ
+  const allCombinations = [];
   
-  for (let i = testPeriodDays; i < data.length; i++) {
-    const curvePrice = fullCurvePoints[i].price;
-    if (data[i].low < curvePrice - 0.001) {
-      researchEndIndex = i - 1;
-      hasCrossing = true;
-      console.log(`\n⚠️ ПЕРЕСЕЧЕНИЕ в день ${i + 1}: цена $${data[i].low.toFixed(2)} < линия $${curvePrice.toFixed(2)}`);
-      break;
+  // Находим все точки-кандидаты на тестовом участке
+  for (let i = 0; i < testData.length; i++) {
+    // Проверка фильтра для точки 1
+    if (point1MaxDay !== null && i > point1MaxDay - 1) continue;
+    
+    for (let j = i + 1; j < testData.length; j++) {
+      // Проверка фильтра для точки 2
+      if (point2MinDay !== null) {
+        const minAllowedIndex = testData.length - point2MinDay;
+        if (j < minAllowedIndex) continue;
+      }
+      
+      // Рассчитываем экспоненциальную линию для этой пары точек
+      const n = j - i;
+      const percentPerDay = Math.pow(testData[j].low / testData[i].low, 1 / n);
+      
+      // Проверяем, что линия проходит ниже всех свечей на тестовом участке
+      let isValid = true;
+      for (let k = 0; k < testData.length; k++) {
+        const curvePrice = testData[i].low * Math.pow(percentPerDay, k - i);
+        if (testData[k].low < curvePrice - 0.001) {
+          isValid = false;
+          break;
+        }
+      }
+      
+      if (!isValid) continue;
+      
+      // Строим кривую для тестового участка
+      const testCurvePoints = [];
+      for (let k = 0; k < testData.length; k++) {
+        const price = testData[i].low * Math.pow(percentPerDay, k - i);
+        testCurvePoints.push({ index: k, price });
+      }
+      
+      allCombinations.push({
+        point1Index: i,
+        point2Index: j,
+        point1Price: testData[i].low,
+        point2Price: testData[j].low,
+        percentPerDay: percentPerDay,
+        testCurvePoints: testCurvePoints
+      });
+    }
+  }
+  
+  console.log(`\n📋 Найдено комбинаций точек: ${allCombinations.length}`);
+  
+  if (allCombinations.length === 0) {
+    console.log('❌ Нет комбинаций, прошедших фильтры точек');
+    return null;
+  }
+
+  // 2. ПЕРЕБИРАЕМ ВСЕ СТРАТЕГИИ ДЛЯ КАЖДОЙ КОМБИНАЦИИ
+  let bestCombination = null;
+  let maxSimilarity = -Infinity;
+  let totalChecked = 0;
+  let passedFilters = 0;
+
+  for (const combo of allCombinations) {
+    // Находим локальный максимум для этой комбинации
+    let localMax = 0;
+    testData.forEach(candle => {
+      if (candle.high > localMax) localMax = candle.high;
+    });
+
+    // Перебираем стратегии
+    for (let entryPercent = 0.3; entryPercent <= 20.0; entryPercent += 0.1) {
+      for (let exitPercent = entryPercent + 0.3; exitPercent <= 30.0; exitPercent += 0.1) {
+        totalChecked++;
+        
+        // Проверяем достижимость цены выхода
+        const maxSupportPrice = Math.max(...combo.testCurvePoints.map(p => p.price));
+        const exitPrice = maxSupportPrice * (1 + exitPercent / 100);
+        if (exitPrice > localMax) break;
+
+        // ТЕСТ: Симулируем торговлю на тестовом участке
+        const testResult = simulateTrading(testData, combo.testCurvePoints, entryPercent, exitPercent);
+        const testTradesPercent = (testResult.cleanTrades / testData.length) * 100;
+        
+        // ФИЛЬТР 3: Проверяем минимальный % сделок на тестовом участке
+        if (testTradesPercent < minTradesPercent) continue;
+
+        // ИССЛЕДОВАНИЕ: Продлеваем линию и симулируем на исследуемом участке
+        const fullCurvePoints = [];
+        for (let k = 0; k < data.length; k++) {
+          const price = combo.point1Price * Math.pow(combo.percentPerDay, k - combo.point1Index);
+          fullCurvePoints.push({ index: k, price });
+        }
+
+        // Проверяем пересечения
+        let researchEndIndex = data.length - 1;
+        let hasCrossing = false;
+        for (let k = testPeriodDays; k < data.length; k++) {
+          if (data[k].low < fullCurvePoints[k].price - 0.001) {
+            researchEndIndex = k - 1;
+            hasCrossing = true;
+            break;
+          }
+        }
+
+        const researchDataForCalc = data.slice(testPeriodDays, researchEndIndex + 1);
+        if (researchDataForCalc.length === 0) continue;
+
+        const researchCurvePoints = fullCurvePoints.slice(testPeriodDays, researchEndIndex + 1).map((p, idx) => ({
+          index: idx,
+          price: p.price
+        }));
+
+        const researchResult = simulateTrading(researchDataForCalc, researchCurvePoints, entryPercent, exitPercent);
+        const researchTradesPercent = (researchResult.cleanTrades / researchDataForCalc.length) * 100;
+
+        // ФИЛЬТР: Проверяем минимальный % сделок на исследуемом участке
+        if (researchTradesPercent < minTradesPercent) continue;
+
+        passedFilters++;
+
+        // РАСЧЕТ СХОЖЕСТИ
+        const testAvg = testResult.avgPercentPerDay;
+        const researchAvg = researchResult.avgPercentPerDay;
+        const similarity = testAvg !== 0 ? (researchAvg / testAvg) * 100 : 0;
+
+        // Сохраняем лучшую комбинацию
+        if (similarity > maxSimilarity) {
+          maxSimilarity = similarity;
+          bestCombination = {
+            ...combo,
+            entryPercent: entryPercent.toFixed(1),
+            exitPercent: exitPercent.toFixed(1),
+            testStrategy: {
+              avgPercentPerDay: testResult.avgPercentPerDay.toFixed(4),
+              totalTrades: testResult.cleanTrades,
+              totalDays: testData.length,
+              hasFactClose: testResult.hasFactClose,
+              tradesPercent: testTradesPercent.toFixed(2),
+              totalProfit: testResult.totalProfit.toFixed(2),
+              entryPercent: entryPercent.toFixed(1),
+              exitPercent: exitPercent.toFixed(1)
+            },
+            researchStrategy: {
+              avgPercentPerDay: researchResult.avgPercentPerDay.toFixed(4),
+              totalTrades: researchResult.cleanTrades,
+              totalDays: researchDataForCalc.length,
+              hasFactClose: researchResult.hasFactClose,
+              tradesPercent: researchTradesPercent.toFixed(2),
+              totalProfit: researchResult.totalProfit.toFixed(2)
+            },
+            fullCurvePoints: fullCurvePoints,
+            researchEndIndex: researchEndIndex,
+            hasCrossing: hasCrossing,
+            similarityPercent: similarity.toFixed(2)
+          };
+        }
+      }
     }
   }
 
-  // 4. Применяем стратегию на исследуемом участке (до точки пересечения)
-  const researchDataForCalc = data.slice(testPeriodDays, researchEndIndex + 1);
-  const researchCurvePoints = fullCurvePoints.slice(testPeriodDays, researchEndIndex + 1).map((p, i) => ({
-    index: i,
-    price: p.price
-  }));
-
-  let researchStrategy = null;
-  if (researchDataForCalc.length > 0 && testResult.tradingStrategy) {
-    const entryPercent = parseFloat(testResult.tradingStrategy.entryPercent);
-    const exitPercent = parseFloat(testResult.tradingStrategy.exitPercent);
-    
-    const result = simulateTrading(researchDataForCalc, researchCurvePoints, entryPercent, exitPercent);
-    const tradesPercent = (result.cleanTrades / researchDataForCalc.length) * 100;
-    
-    researchStrategy = {
-      avgPercentPerDay: result.avgPercentPerDay.toFixed(4),
-      totalTrades: result.cleanTrades,
-      totalDays: researchDataForCalc.length,
-      hasFactClose: result.hasFactClose,
-      tradesPercent: tradesPercent.toFixed(2),
-      totalProfit: result.totalProfit.toFixed(2)
-    };
+  console.log(`\n📊 СТАТИСТИКА:`);
+  console.log(`Проверено комбинаций: ${totalChecked}`);
+  console.log(`Прошло все фильтры: ${passedFilters}`);
+  
+  if (!bestCombination) {
+    console.log('❌ Ни одна комбинация не прошла все фильтры');
+    return null;
   }
 
-  console.log('\n📊 ИССЛЕДУЕМЫЙ УЧАСТОК:');
-  console.log(`Действительный период: дни ${testPeriodDays + 1}-${researchEndIndex + 1} (${researchDataForCalc.length} дней)`);
-  if (hasCrossing) {
-    console.log(`⚠️ Линия пересекла свечу - расчеты до дня ${researchEndIndex + 1}`);
-  }
-  if (researchStrategy) {
-    console.log(`Средний % в день: ${researchStrategy.avgPercentPerDay}%`);
-    console.log(`Всего сделок: ${researchStrategy.totalTrades}`);
-    console.log(`Общая прибыль: ${researchStrategy.totalProfit}%`);
-    console.log(`Процент сделок: ${researchStrategy.tradesPercent}%`);
-  }
-
-  // 5. Рассчитываем процент похожести
-  let similarityPercent = 0;
-  if (testResult.tradingStrategy && researchStrategy) {
-    const testAvg = parseFloat(testResult.tradingStrategy.avgPercentPerDay);
-    const researchAvg = parseFloat(researchStrategy.avgPercentPerDay);
-    
-    if (testAvg !== 0) {
-      similarityPercent = (researchAvg / testAvg) * 100;
-    }
-    
-    console.log('\n🎯 ПРОЦЕНТ ПОХОЖЕСТИ:');
-    console.log(`Тест: ${testAvg}% в день`);
-    console.log(`Исследование: ${researchAvg}% в день`);
-    console.log(`Похожесть: ${similarityPercent.toFixed(2)}%`);
-  }
+  console.log(`\n🏆 ЛУЧШАЯ КОМБИНАЦИЯ (схожесть: ${bestCombination.similarityPercent}%):`);
+  console.log(`Точка 1: день ${bestCombination.point1Index + 1}, цена $${bestCombination.point1Price.toFixed(2)}`);
+  console.log(`Точка 2: день ${bestCombination.point2Index + 1}, цена $${bestCombination.point2Price.toFixed(2)}`);
+  console.log(`Стратегия: ENTER=${bestCombination.entryPercent}%, EXIT=${bestCombination.exitPercent}%`);
+  console.log(`Тест: ${bestCombination.testStrategy.avgPercentPerDay}% в день, ${bestCombination.testStrategy.tradesPercent}% сделок`);
+  console.log(`Иссл: ${bestCombination.researchStrategy.avgPercentPerDay}% в день, ${bestCombination.researchStrategy.tradesPercent}% сделок`);
 
   return {
-    points: testResult.points,
-    curvePoints: fullCurvePoints,
-    percentPerDay: percentPerDay,
-    percentPerDayPercent: testResult.percentPerDayPercent,
-    touches: testResult.touches,
-    startPrice: fullCurvePoints[0].price,
-    endPrice: fullCurvePoints[fullCurvePoints.length - 1].price,
-    
-    // Данные о разделении
+    points: [
+      { index: bestCombination.point1Index, price: bestCombination.point1Price, date: testData[bestCombination.point1Index].date },
+      { index: bestCombination.point2Index, price: bestCombination.point2Price, date: testData[bestCombination.point2Index].date }
+    ],
+    curvePoints: bestCombination.fullCurvePoints,
+    percentPerDay: bestCombination.percentPerDay,
+    percentPerDayPercent: ((bestCombination.percentPerDay - 1) * 100).toFixed(4),
+    touches: 2,
+    startPrice: bestCombination.fullCurvePoints[0].price,
+    endPrice: bestCombination.fullCurvePoints[bestCombination.fullCurvePoints.length - 1].price,
     testPeriodDays: testPeriodDays,
-    testStrategy: testResult.tradingStrategy,
-    researchStrategy: researchStrategy,
-    researchEndIndex: researchEndIndex,
-    hasCrossing: hasCrossing,
-    similarityPercent: similarityPercent.toFixed(2)
+    testStrategy: bestCombination.testStrategy,
+    researchStrategy: bestCombination.researchStrategy,
+    researchEndIndex: bestCombination.researchEndIndex,
+    hasCrossing: bestCombination.hasCrossing,
+    similarityPercent: bestCombination.similarityPercent
   };
 }
