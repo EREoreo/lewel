@@ -1,3 +1,5 @@
+// КРИТИЧЕСКИЙ ФИКС: Линия Level 1 всегда должна идти ВВЕРХ!
+
 // Симуляция торговли для конкретной комбинации входа/выхода
 function simulateTrading(data, curvePoints, entryPercent, exitPercent) {
   let totalProfit = 0;
@@ -166,17 +168,24 @@ export function calculateExponentialSupportLine(data, point1MaxDay = null, point
   };
   
   // 2. Ищем все возможные точки справа от первой
+  // 🔥 КРИТИЧЕСКИЙ ФИКС: Точка 2 должна быть ВЫШЕ точки 1!
   const candidatesRight = [];
   for (let i = absoluteMinIndex + 1; i < data.length; i++) {
-    candidatesRight.push({
-      index: i,
-      price: data[i].low,
-      date: data[i].date
-    });
+    // ✅ ФИЛЬТР: Берем только точки ВЫШЕ первой (для роста)
+    if (data[i].low > absoluteMinPrice) {
+      candidatesRight.push({
+        index: i,
+        price: data[i].low,
+        date: data[i].date
+      });
+    }
   }
   
-  // Если справа нет точек, возвращаем null
-  if (candidatesRight.length === 0) return null;
+  // Если справа нет точек ВЫШЕ первой, возвращаем null
+  if (candidatesRight.length === 0) {
+    console.log(`❌ Нет точек справа ВЫШЕ точки 1 ($${absoluteMinPrice.toFixed(2)}) - невозможно построить растущую линию`);
+    return null;
+  }
   
   // 3. Перебираем все точки и ищем ту, при которой процент минимальный
   let minPercentPerDay = Infinity;
@@ -199,6 +208,12 @@ export function calculateExponentialSupportLine(data, point1MaxDay = null, point
     
     // Рассчитываем процент в день: n√(цена2 / цена1)
     const percentPerDay = Math.pow(candidate.price / point1.price, 1 / n);
+    
+    // 🔥 ПРОВЕРКА: percentPerDay должен быть > 1 (рост!)
+    if (percentPerDay <= 1.0) {
+      console.log(`⚠️ Пропускаем точку ${candidate.index + 1}: percentPerDay=${percentPerDay.toFixed(4)} (нет роста)`);
+      continue;
+    }
     
     // Строим кривую и проверяем, что все свечи выше неё
     let isValid = true;
@@ -228,11 +243,20 @@ export function calculateExponentialSupportLine(data, point1MaxDay = null, point
   
   // Если не нашли подходящую точку
   if (!bestPoint2) {
-    console.log(`❌ Точка 2 не найдена в последних ${point2MinDay || 'любых'} днях`);
+    console.log(`❌ Точка 2 не найдена - невозможно построить валидную растущую линию`);
+    console.log(`   Возможно: акция падает, используйте Level 2`);
     return null;
   }
   
-  console.log(`✅ Точка 1: день ${point1.index + 1}, Точка 2: день ${bestPoint2.index + 1}`);
+  // 🔥 ФИНАЛЬНАЯ ПРОВЕРКА: Линия должна расти!
+  if (bestCurveParams.percentPerDay <= 1.0) {
+    console.log(`❌ КРИТИЧЕСКАЯ ОШИБКА: Линия падает (${bestCurveParams.percentPerDay.toFixed(4)})`);
+    return null;
+  }
+  
+  console.log(`✅ Точка 1: день ${point1.index + 1}, $${point1.price.toFixed(2)}`);
+  console.log(`✅ Точка 2: день ${bestPoint2.index + 1}, $${bestPoint2.price.toFixed(2)}`);
+  console.log(`✅ Рост: ${((bestCurveParams.percentPerDay - 1) * 100).toFixed(4)}% в день`);
   
   // Формируем массив точек кривой для отрисовки
   const curvePoints = [];
@@ -304,9 +328,19 @@ export function calculateExponentialSupportLineWithTest(data, testPeriodDays, po
         if (j < minAllowedIndex) continue;
       }
       
+      // 🔥 КРИТИЧЕСКИЙ ФИКС: Точка 2 должна быть ВЫШЕ точки 1!
+      if (testData[j].low <= testData[i].low) {
+        continue; // Пропускаем - нет роста
+      }
+      
       // Рассчитываем экспоненциальную линию для этой пары точек
       const n = j - i;
       const percentPerDay = Math.pow(testData[j].low / testData[i].low, 1 / n);
+      
+      // 🔥 ПРОВЕРКА: Должен быть рост!
+      if (percentPerDay <= 1.0) {
+        continue;
+      }
       
       // Проверяем, что линия проходит ниже всех свечей на тестовом участке
       let isValid = true;
@@ -342,6 +376,7 @@ export function calculateExponentialSupportLineWithTest(data, testPeriodDays, po
   
   if (allCombinations.length === 0) {
     console.log('❌ Нет комбинаций, прошедших фильтры точек');
+    console.log('   Возможно: акция падает на тестовом участке, используйте Level 2');
     return null;
   }
 
@@ -461,6 +496,7 @@ export function calculateExponentialSupportLineWithTest(data, testPeriodDays, po
   console.log(`\n🏆 ЛУЧШАЯ КОМБИНАЦИЯ (схожесть: ${bestCombination.similarityPercent}%):`);
   console.log(`Точка 1: день ${bestCombination.point1Index + 1}, цена $${bestCombination.point1Price.toFixed(2)}`);
   console.log(`Точка 2: день ${bestCombination.point2Index + 1}, цена $${bestCombination.point2Price.toFixed(2)}`);
+  console.log(`Рост: ${((bestCombination.percentPerDay - 1) * 100).toFixed(4)}% в день`);
   console.log(`Стратегия: ENTER=${bestCombination.entryPercent}%, EXIT=${bestCombination.exitPercent}%`);
   console.log(`Тест: ${bestCombination.testStrategy.avgPercentPerDay}% в день, ${bestCombination.testStrategy.tradesPercent}% сделок`);
   console.log(`Иссл: ${bestCombination.researchStrategy.avgPercentPerDay}% в день, ${bestCombination.researchStrategy.tradesPercent}% сделок`);

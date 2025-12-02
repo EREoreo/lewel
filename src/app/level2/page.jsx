@@ -19,6 +19,9 @@ export default function Level2Page() {
   const [point2MinDay, setPoint2MinDay] = useState('');
   const [minTradesPercent, setMinTradesPercent] = useState('');
   
+  // Тестовый период для массовой обработки
+  const [batchTestPeriodDays, setBatchTestPeriodDays] = useState('');
+  
   const [chartData, setChartData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -56,6 +59,9 @@ export default function Level2Page() {
       if (point1MaxDay) formData.append('point1MaxDay', point1MaxDay);
       if (point2MinDay) formData.append('point2MinDay', point2MinDay);
       if (minTradesPercent) formData.append('minTradesPercent', minTradesPercent);
+      
+      // ТЕСТОВЫЙ ПЕРИОД ДЛЯ МАССОВОЙ ОБРАБОТКИ
+      if (batchTestPeriodDays) formData.append('testPeriodDays', batchTestPeriodDays);
 
       const response = await fetch('/api/batch', {
         method: 'POST',
@@ -335,7 +341,24 @@ export default function Level2Page() {
                 className="w-full px-4 py-2 rounded-lg bg-gray-200 text-gray-800 focus:outline-none focus:ring-2 focus:ring-orange-400"
               />
 
-              {/* НОВЫЕ ПОЛЯ ДЛЯ МАССОВОЙ ОБРАБОТКИ */}
+              {/* НОВОЕ ПОЛЕ: ТЕСТОВЫЙ ПЕРИОД ДЛЯ МАССОВОЙ ОБРАБОТКИ */}
+              <div className="border-t border-white/20 pt-3">
+                <p className="text-white text-xs font-semibold mb-3">📅 Разделение периода</p>
+                
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="Тестовый период (дней)"
+                  value={batchTestPeriodDays}
+                  onChange={(e) => setBatchTestPeriodDays(e.target.value)}
+                  className="w-full px-3 py-2 mb-2 rounded-lg bg-gray-200 text-gray-800 placeholder-gray-600 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
+                />
+                <p className="text-white/70 text-xs">
+                  💡 Например: 30 (первые 30 дней = тест)
+                </p>
+              </div>
+
+              {/* ФИЛЬТРЫ ДЛЯ МАССОВОЙ ОБРАБОТКИ */}
               <div className="border-t border-white/20 pt-3">
                 <p className="text-white text-xs font-semibold mb-3">🎯 Фильтры (необязательно)</p>
                 
@@ -408,6 +431,7 @@ export default function Level2Page() {
           <div className="mt-6 p-3 bg-white/10 rounded-lg text-white/80 text-xs">
             <p className="font-semibold mb-2">🆕 Новые фильтры:</p>
             <ul className="space-y-1 list-disc list-inside">
+              <li>Тестовый период: разделение данных</li>
               <li>Точка 1 до дня: в начале</li>
               <li>Точка 2 от конца: в последних N днях</li>
               <li>Мин. % сделок: фильтр комбинаций</li>
@@ -451,6 +475,9 @@ export default function Level2Page() {
                       <li>• Процент в день</li>
                       <li>• Трейды, Всего дней, Закрыто по факту</li>
                       <li>• Процент сделок</li>
+                      {batchTestPeriodDays && (
+                        <li className="text-orange-900 font-semibold">• Тест и Исследование, Схожесть</li>
+                      )}
                     </ul>
                   </div>
                 </div>

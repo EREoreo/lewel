@@ -1,3 +1,5 @@
+// КРИТИЧЕСКИЙ ФИКС: Линия Level 2 всегда должна идти ВНИЗ!
+
 // Симуляция торговли - ТОЧНО КАК В EXCEL!
 function simulateTrading(data, curvePoints, entryPercent, exitPercent, verbose = false) {
   let totalProfit = 0;
@@ -177,16 +179,23 @@ export function calculateExponentialResistanceLine(data, point1MaxDay = null, po
   };
   
   // 2. Ищем точки справа
+  // 🔥 КРИТИЧЕСКИЙ ФИКС: Точка 2 должна быть НИЖЕ точки 1!
   const candidatesRight = [];
   for (let i = absoluteMaxIndex + 1; i < data.length; i++) {
-    candidatesRight.push({
-      index: i,
-      price: data[i].high,
-      date: data[i].date
-    });
+    // ✅ ФИЛЬТР: Берем только точки НИЖЕ первой (для падения)
+    if (data[i].high < absoluteMaxPrice) {
+      candidatesRight.push({
+        index: i,
+        price: data[i].high,
+        date: data[i].date
+      });
+    }
   }
   
-  if (candidatesRight.length === 0) return null;
+  if (candidatesRight.length === 0) {
+    console.log(`❌ Нет точек справа НИЖЕ точки 1 ($${absoluteMaxPrice.toFixed(2)}) - невозможно построить падающую линию`);
+    return null;
+  }
   
   // 3. Перебираем точки
   let minPercentPerDay = Infinity;
@@ -204,6 +213,12 @@ export function calculateExponentialResistanceLine(data, point1MaxDay = null, po
     
     const n = candidate.index - point1.index;
     const percentPerDay = Math.pow(candidate.price / point1.price, 1 / n);
+    
+    // 🔥 ПРОВЕРКА: percentPerDay должен быть < 1 (падение!)
+    if (percentPerDay >= 1.0) {
+      console.log(`⚠️ Пропускаем точку ${candidate.index + 1}: percentPerDay=${percentPerDay.toFixed(4)} (нет падения)`);
+      continue;
+    }
     
     let isValid = true;
     
@@ -228,11 +243,20 @@ export function calculateExponentialResistanceLine(data, point1MaxDay = null, po
   }
   
   if (!bestPoint2) {
-    console.log(`❌ Точка 2 не найдена в последних ${point2MinDay || 'любых'} днях`);
+    console.log(`❌ Точка 2 не найдена - невозможно построить валидную падающую линию`);
+    console.log(`   Возможно: акция растет, используйте Level 1`);
     return null;
   }
   
-  console.log(`✅ Точка 1: день ${point1.index + 1}, Точка 2: день ${bestPoint2.index + 1}`);
+  // 🔥 ФИНАЛЬНАЯ ПРОВЕРКА: Линия должна падать!
+  if (bestCurveParams.percentPerDay >= 1.0) {
+    console.log(`❌ КРИТИЧЕСКАЯ ОШИБКА: Линия растет (${bestCurveParams.percentPerDay.toFixed(4)})`);
+    return null;
+  }
+  
+  console.log(`✅ Точка 1: день ${point1.index + 1}, $${point1.price.toFixed(2)}`);
+  console.log(`✅ Точка 2: день ${bestPoint2.index + 1}, $${bestPoint2.price.toFixed(2)}`);
+  console.log(`✅ Падение: ${((1 - bestCurveParams.percentPerDay) * 100).toFixed(4)}% в день`);
   
   // 4. Формируем кривую
   const curvePoints = [];
@@ -303,8 +327,18 @@ export function calculateExponentialResistanceLineWithTest(data, testPeriodDays,
         if (j < minAllowedIndex) continue;
       }
       
+      // 🔥 КРИТИЧЕСКИЙ ФИКС: Точка 2 должна быть НИЖЕ точки 1!
+      if (testData[j].high >= testData[i].high) {
+        continue; // Пропускаем - нет падения
+      }
+      
       const n = j - i;
       const percentPerDay = Math.pow(testData[j].high / testData[i].high, 1 / n);
+      
+      // 🔥 ПРОВЕРКА: Должно быть падение!
+      if (percentPerDay >= 1.0) {
+        continue;
+      }
       
       // Проверяем, что линия проходит выше всех свечей на тестовом участке
       let isValid = true;
@@ -339,6 +373,7 @@ export function calculateExponentialResistanceLineWithTest(data, testPeriodDays,
   
   if (allCombinations.length === 0) {
     console.log('❌ Нет комбинаций, прошедших фильтры точек');
+    console.log('   Возможно: акция растет на тестовом участке, используйте Level 1');
     return null;
   }
 
@@ -452,6 +487,7 @@ export function calculateExponentialResistanceLineWithTest(data, testPeriodDays,
   console.log(`\n🏆 ЛУЧШАЯ КОМБИНАЦИЯ (схожесть: ${bestCombination.similarityPercent}%):`);
   console.log(`Точка 1: день ${bestCombination.point1Index + 1}, цена $${bestCombination.point1Price.toFixed(2)}`);
   console.log(`Точка 2: день ${bestCombination.point2Index + 1}, цена $${bestCombination.point2Price.toFixed(2)}`);
+  console.log(`Падение: ${((1 - bestCombination.percentPerDay) * 100).toFixed(4)}% в день`);
   console.log(`Стратегия: ENTER=${bestCombination.entryPercent}%, EXIT=${bestCombination.exitPercent}%`);
   console.log(`Тест: ${bestCombination.testStrategy.avgPercentPerDay}% в день, ${bestCombination.testStrategy.tradesPercent}% сделок`);
   console.log(`Иссл: ${bestCombination.researchStrategy.avgPercentPerDay}% в день, ${bestCombination.researchStrategy.tradesPercent}% сделок`);

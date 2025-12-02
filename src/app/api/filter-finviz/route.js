@@ -42,8 +42,8 @@ export async function POST(request) {
 
     // URL для Finviz
     const FINVIZ_URLS = {
-      nasdaq: "https://elite.finviz.com/export.ashx?v=152&f=exch_nasd,ind_stocksonly,sh_avgvol_o300,sh_price_3to80&auth=56d25c88-21a3-47a8-ad5a-605f01591d43",
-      nyse: "https://elite.finviz.com/export.ashx?v=152&f=exch_nyse,ind_stocksonly,sh_avgvol_o300,sh_price_3to80&auth=56d25c88-21a3-47a8-ad5a-605f01591d43"
+      nasdaq: "https://elite.finviz.com/export.ashx?v=151&f=exch_nasd%2Cind_stocksonly%2Csh_avgvol_o300%2Csh_price_3to80&c=1&auth=56d25c88-21a3-47a8-ad5a-605f01591d43",
+      nyse: "https://elite.finviz.com/export.ashx?v=151&f=exch_nyse%2Cind_stocksonly%2Csh_avgvol_o300%2Csh_price_3to80&c=1&auth=56d25c88-21a3-47a8-ad5a-605f01591d43"
     };
 
     const finvizUrl = FINVIZ_URLS[exchange];
