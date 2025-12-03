@@ -171,53 +171,53 @@ export async function POST(request) {
           continue;
         }
 
-        // ФОРМИРУЕМ СТРОКУ РЕЗУЛЬТАТА
+        // ФОРМИРУЕМ СТРОКУ РЕЗУЛЬТАТА (БЕЗ ЗНАКОВ %)
         if (analysisResult.testPeriodDays) {
           // Режим с тестовым периодом - расширенный формат
           results.push([
             ticker,
-            point1.price.toFixed(2),
-            point2.price.toFixed(2),
+            parseFloat(point1.price.toFixed(2)),
+            parseFloat(point2.price.toFixed(2)),
             point1.index + 1,
             point2.index + 1,
-            analysisResult.percentPerDayPercent + '%',
+            parseFloat(analysisResult.percentPerDayPercent),
             // ТЕСТ
-            strategy.avgPercentPerDay + '%',
-            strategy.entryPercent + '%',
-            strategy.exitPercent + '%',
+            parseFloat(strategy.avgPercentPerDay),
+            parseFloat(strategy.entryPercent),
+            parseFloat(strategy.exitPercent),
             strategy.totalTrades,
             strategy.totalDays,
             strategy.hasFactClose,
-            strategy.tradesPercent + '%',
+            parseFloat(strategy.tradesPercent),
             // ИССЛЕДОВАНИЕ
-            analysisResult.researchStrategy.avgPercentPerDay + '%',
+            parseFloat(analysisResult.researchStrategy.avgPercentPerDay),
             analysisResult.researchStrategy.totalTrades,
             analysisResult.researchStrategy.totalDays,
             analysisResult.researchStrategy.hasFactClose,
-            analysisResult.researchStrategy.tradesPercent + '%',
-            analysisResult.researchStrategy.totalProfit + '%',
+            parseFloat(analysisResult.researchStrategy.tradesPercent),
+            parseFloat(analysisResult.researchStrategy.totalProfit),
             // МЕТРИКИ
             analysisResult.hasCrossing ? 'Да' : 'Нет',
-            analysisResult.similarityPercent + '%'
+            parseFloat(analysisResult.similarityPercent)
           ]);
           
           console.log(`  ✅ Обработан успешно | Схожесть: ${analysisResult.similarityPercent}%`);
         } else {
-          // Обычный режим - стандартный формат
+          // Обычный режим - стандартный формат (БЕЗ ЗНАКОВ %)
           results.push([
             ticker,
-            point1.price.toFixed(2),
-            point2.price.toFixed(2),
+            parseFloat(point1.price.toFixed(2)),
+            parseFloat(point2.price.toFixed(2)),
             point1.index + 1,
             point2.index + 1,
-            analysisResult.percentPerDayPercent + '%',
-            strategy.avgPercentPerDay + '%',
-            strategy.entryPercent + '%',
-            strategy.exitPercent + '%',
+            parseFloat(analysisResult.percentPerDayPercent),
+            parseFloat(strategy.avgPercentPerDay),
+            parseFloat(strategy.entryPercent),
+            parseFloat(strategy.exitPercent),
             strategy.totalTrades,
             strategy.totalDays,
             strategy.hasFactClose,
-            strategy.tradesPercent + '%'
+            parseFloat(strategy.tradesPercent)
           ]);
           
           console.log(`  ✅ Обработан успешно | Средний %: ${strategy.avgPercentPerDay}%`);
