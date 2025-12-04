@@ -171,9 +171,13 @@ export async function POST(request) {
           continue;
         }
 
-        // ФОРМИРУЕМ СТРОКУ РЕЗУЛЬТАТА (БЕЗ ЗНАКОВ %)
+        // 💡 ЗАМЕНЁННЫЙ БЛОК: ФОРМИРУЕМ СТРОКУ РЕЗУЛЬТАТА
         if (analysisResult.testPeriodDays) {
-          // Режим с тестовым периодом - расширенный формат
+          // Режим с тестовым периодом - ДВОЙНОЙ ФОРМАТ
+          
+          // ========================================
+          // СТРОКА 1: 🎯 Лучшая по СХОЖЕСТИ
+          // ========================================
           results.push([
             ticker,
             parseFloat(point1.price.toFixed(2)),
@@ -198,10 +202,45 @@ export async function POST(request) {
             parseFloat(analysisResult.researchStrategy.totalProfit),
             // МЕТРИКИ
             analysisResult.hasCrossing ? 'Да' : 'Нет',
-            parseFloat(analysisResult.similarityPercent)
+            parseFloat(analysisResult.similarityPercent),
+            '🎯 СХОЖЕСТЬ' // Тип комбинации
           ]);
           
-          console.log(`  ✅ Обработан успешно | Схожесть: ${analysisResult.similarityPercent}%`);
+          // ========================================
+          // СТРОКА 2: 🏆 Лучшая по ТЕСТУ
+          // ========================================
+          if (analysisResult.bestTestOnly) {
+            const testOnlyResult = analysisResult.bestTestOnly;
+            results.push([
+              ticker,
+              parseFloat(testOnlyResult.point1Price.toFixed(2)),
+              parseFloat(testOnlyResult.point2Price.toFixed(2)),
+              testOnlyResult.point1Index + 1,
+              testOnlyResult.point2Index + 1,
+              parseFloat(testOnlyResult.percentPerDayPercent),
+              // ТЕСТ
+              parseFloat(testOnlyResult.testStrategy.avgPercentPerDay),
+              parseFloat(testOnlyResult.testStrategy.entryPercent),
+              parseFloat(testOnlyResult.testStrategy.exitPercent),
+              testOnlyResult.testStrategy.totalTrades,
+              testOnlyResult.testStrategy.totalDays,
+              testOnlyResult.testStrategy.hasFactClose,
+              parseFloat(testOnlyResult.testStrategy.tradesPercent),
+              // ИССЛЕДОВАНИЕ (пусто для test-only)
+              '-',
+              '-',
+              '-',
+              '-',
+              '-',
+              '-',
+              // МЕТРИКИ
+              '-',
+              '-',
+              '🏆 ТЕСТ ТОЛЬКО' // Тип комбинации
+            ]);
+          }
+          
+          console.log(`  ✅ Обработан успешно | Схожесть: ${analysisResult.similarityPercent}% | Тест: ${analysisResult.bestTestOnly?.testStrategy.avgPercentPerDay}%`);
         } else {
           // Обычный режим - стандартный формат (БЕЗ ЗНАКОВ %)
           results.push([
@@ -249,7 +288,7 @@ export async function POST(request) {
     const wb = XLSX.utils.book_new();
     const sheetName = analysisType === 'level1' ? 'Level1 Support' : 'Level2 Resistance';
     
-    // ЗАГОЛОВКИ в зависимости от режима
+    // 💡 ЗАМЕНЁННЫЙ БЛОК: ЗАГОЛОВКИ
     let headers;
     if (testPeriodDays) {
       // Расширенные заголовки для режима с тестом
@@ -277,7 +316,8 @@ export async function POST(request) {
         'ИССЛ: Общая прибыль',
         // МЕТРИКИ
         'Пересечение?',
-        'Процент схожести'
+        'Процент схожести',
+        'Тип комбинации' // 🆕 НОВАЯ КОЛОНКА
       ];
     } else {
       // Стандартные заголовки
