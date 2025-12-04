@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Level2Chart from '../components/Level2Chart';
 import { fetchStockData } from '../lib/yahooFinance';
@@ -8,19 +8,34 @@ import { fetchStockData } from '../lib/yahooFinance';
 export default function Level2Page() {
   const router = useRouter();
   
-  // Одиночный режим
-  const [ticker, setTicker] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  // 🔥 ЗАГРУЖАЕМ из localStorage СРАЗУ в начальное состояние
+  const getInitialState = () => {
+    if (typeof window === 'undefined') return '';
+    try {
+      const saved = localStorage.getItem('level2_state');
+      if (saved) {
+        const state = JSON.parse(saved);
+        console.log('📥 Начальная загрузка Level 2:', state);
+        return state;
+      }
+    } catch (error) {
+      console.error('❌ Ошибка загрузки:', error);
+    }
+    return null;
+  };
+
+  const initialState = getInitialState();
   
-  // НОВЫЕ ПОЛЯ
-  const [testPeriodDays, setTestPeriodDays] = useState('');
-  const [point1MaxDay, setPoint1MaxDay] = useState('');
-  const [point2MinDay, setPoint2MinDay] = useState('');
-  const [minTradesPercent, setMinTradesPercent] = useState('');
-  
-  // Тестовый период для массовой обработки
-  const [batchTestPeriodDays, setBatchTestPeriodDays] = useState('');
+  // СОСТОЯНИЕ с начальными значениями из localStorage
+  const [ticker, setTicker] = useState(initialState?.ticker || '');
+  const [startDate, setStartDate] = useState(initialState?.startDate || '');
+  const [endDate, setEndDate] = useState(initialState?.endDate || '');
+  const [testPeriodDays, setTestPeriodDays] = useState(initialState?.testPeriodDays || '');
+  const [point1MaxDay, setPoint1MaxDay] = useState(initialState?.point1MaxDay || '');
+  const [point2MinDay, setPoint2MinDay] = useState(initialState?.point2MinDay || '');
+  const [minTradesPercent, setMinTradesPercent] = useState(initialState?.minTradesPercent || '');
+  const [batchTestPeriodDays, setBatchTestPeriodDays] = useState(initialState?.batchTestPeriodDays || '');
+  const [mode, setMode] = useState(initialState?.mode || 'single');
   
   const [chartData, setChartData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -29,7 +44,30 @@ export default function Level2Page() {
   // Массовый режим
   const [selectedFile, setSelectedFile] = useState(null);
   const [batchProcessing, setBatchProcessing] = useState(false);
-  const [mode, setMode] = useState('single');
+
+  // ========================================
+  // 🔥 СОХРАНЕНИЕ: только при изменении значений
+  // ========================================
+  useEffect(() => {
+    const state = {
+      ticker,
+      startDate,
+      endDate,
+      testPeriodDays,
+      point1MaxDay,
+      point2MinDay,
+      minTradesPercent,
+      batchTestPeriodDays,
+      mode
+    };
+    
+    try {
+      localStorage.setItem('level2_state', JSON.stringify(state));
+      console.log('💾 Level 2 сохранено:', state);
+    } catch (error) {
+      console.error('❌ Ошибка сохранения:', error);
+    }
+  }, [ticker, startDate, endDate, testPeriodDays, point1MaxDay, point2MinDay, minTradesPercent, batchTestPeriodDays, mode]);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -55,12 +93,9 @@ export default function Level2Page() {
       formData.append('endDate', endDate);
       formData.append('analysisType', 'level2');
       
-      // НОВЫЕ ПАРАМЕТРЫ
       if (point1MaxDay) formData.append('point1MaxDay', point1MaxDay);
       if (point2MinDay) formData.append('point2MinDay', point2MinDay);
       if (minTradesPercent) formData.append('minTradesPercent', minTradesPercent);
-      
-      // ТЕСТОВЫЙ ПЕРИОД ДЛЯ МАССОВОЙ ОБРАБОТКИ
       if (batchTestPeriodDays) formData.append('testPeriodDays', batchTestPeriodDays);
 
       const response = await fetch('/api/batch', {
@@ -109,20 +144,17 @@ export default function Level2Page() {
       if (!data || data.length === 0) {
         throw new Error('Данные не найдены для указанного периода');
       }
+
+      if (testPeriodDays && parseInt(testPeriodDays) >= data.length) {
+        throw new Error(`Тестовый период (${testPeriodDays} дней) должен быть меньше общего количества дней (${data.length})`);
+      }
       
-      // Проверка точки 1
       if (point1MaxDay && parseInt(point1MaxDay) > data.length) {
         throw new Error(`Точка 1 до дня (${point1MaxDay}) не может быть больше общего количества дней (${data.length})`);
       }
       
-      // Проверка точки 2
       if (point2MinDay && parseInt(point2MinDay) > data.length) {
-        throw new Error(`Точка 2 от конца (${point2MinDay}) не может быть больше общего количества дней (${data.length})`);
-      }
-      
-      // Проверка тестового периода
-      if (testPeriodDays && parseInt(testPeriodDays) >= data.length) {
-        throw new Error(`Тестовый период (${testPeriodDays}) должен быть меньше общего количества дней (${data.length})`);
+        throw new Error(`Точка 2 от дня (${point2MinDay}) не может быть больше общего количества дней (${data.length})`);
       }
 
       setChartData(data);
@@ -160,13 +192,20 @@ export default function Level2Page() {
           <button 
             className="px-8 py-3 bg-orange-500 text-white rounded-full font-medium shadow-lg"
           >
-            Level 2 (Exp. Resistance)
+            Level 2
           </button>
+
           <button
             onClick={() => router.push('/history')}
             className="px-8 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full font-medium transition-colors"
           >
             История
+          </button>
+          <button
+            onClick={() => router.push('/spiski')}
+            className="px-8 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full font-medium transition-colors"
+          >
+            Списки
           </button>
         </div>
       </div>
@@ -225,24 +264,19 @@ export default function Level2Page() {
                 className="w-full px-4 py-2 rounded-lg bg-gray-200 text-gray-800 focus:outline-none focus:ring-2 focus:ring-orange-400"
               />
 
-              {/* ПОЛЕ ТЕСТОВОГО ПЕРИОДА */}
-              <div className="border-t border-white/20 pt-3 mt-3">
-                <p className="text-white text-xs font-semibold mb-3">📅 Разделение периода</p>
-                
-                <div className="relative mb-3">
-                  <label className="block text-white text-xs font-medium mb-1">
-                    Тестовый период (дней)
-                    <span className="text-white/60 text-xs ml-2">необязательно</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    placeholder="напр. 30 (первые 30 дней = тест)"
-                    value={testPeriodDays}
-                    onChange={(e) => setTestPeriodDays(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg bg-gray-200 text-gray-800 placeholder-gray-500 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
-                  />
-                </div>
+              <div className="relative">
+                <label className="block text-white text-sm font-medium mb-2">
+                  Тестовый период (дней)
+                  <span className="text-white/60 text-xs ml-2">необязательно</span>
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="пусто = обычный режим"
+                  value={testPeriodDays}
+                  onChange={(e) => setTestPeriodDays(e.target.value)}
+                  className="w-full px-4 py-2 rounded-lg bg-gray-200 text-gray-800 placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                />
               </div>
 
               {/* НОВЫЕ ПОЛЯ */}
@@ -358,7 +392,7 @@ export default function Level2Page() {
                 </p>
               </div>
 
-              {/* ФИЛЬТРЫ ДЛЯ МАССОВОЙ ОБРАБОТКИ */}
+              {/* НОВЫЕ ПОЛЯ ДЛЯ МАССОВОЙ ОБРАБОТКИ */}
               <div className="border-t border-white/20 pt-3">
                 <p className="text-white text-xs font-semibold mb-3">🎯 Фильтры (необязательно)</p>
                 
@@ -396,7 +430,7 @@ export default function Level2Page() {
                 onClick={handleBatchProcess}
                 disabled={batchProcessing}
                 className={`w-full py-2 rounded-lg text-white font-medium transition-colors ${
-                  batchProcessing ? 'bg-gray-400 cursor-not-allowed' : 'bg-red-600 hover:bg-red-700'
+                  batchProcessing ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'
                 }`}
               >
                 {batchProcessing ? 'Обработка...' : '🚀 Обработать файл'}
@@ -413,7 +447,7 @@ export default function Level2Page() {
           <div className="mt-6 text-white/80 text-xs">
             <p className="font-medium mb-2">Популярные тикеры:</p>
             <div className="space-y-1">
-              {['INTC', 'BABA', 'COIN', 'RIVN'].map(t => (
+              {['MSFT', 'AAPL', 'GOOGL', 'TSLA'].map(t => (
                 <button
                   key={t}
                   onClick={() => {
@@ -441,10 +475,9 @@ export default function Level2Page() {
           <div className="mt-4 p-3 bg-white/10 rounded-lg text-white/80 text-xs">
             <p className="font-semibold mb-2">Особенности Level 2:</p>
             <ul className="space-y-1 list-disc list-inside">
-              <li>Изогнутая экспоненциальная линия</li>
-              <li>Максимальный процент падения в день</li>
+              <li>Изогнутая (экспоненциальная) линия</li>
+              <li>Минимальный процент падения в день</li>
               <li>Проходит выше всех свечей</li>
-              <li>Для анализа падающих акций</li>
             </ul>
           </div>
         </div>
@@ -463,10 +496,10 @@ export default function Level2Page() {
             {mode === 'batch' && (
               <div className="flex items-center justify-center h-[500px]">
                 <div className="text-center max-w-md">
-                  <div className="text-6xl mb-4">📉</div>
+                  <div className="text-6xl mb-4">📈</div>
                   <h3 className="text-2xl font-bold text-gray-800 mb-4">Массовая обработка Level 2</h3>
                   <p className="text-gray-600 mb-6">
-                    Загрузите Excel файл с тикерами и получите экспоненциальные линии сопротивления для падающих акций.
+                    Загрузите Excel файл с тикерами и получите экспоненциальные линии сопротивления.
                   </p>
                   <div className="bg-orange-50 p-4 rounded-lg text-sm text-left">
                     <p className="font-semibold text-orange-900 mb-2">Результат будет содержать:</p>
@@ -512,7 +545,7 @@ export default function Level2Page() {
                 </div>
                 <Level2Chart 
                   data={chartData} 
-                  ticker={ticker}
+                  ticker={ticker} 
                   testPeriodDays={testPeriodDays ? parseInt(testPeriodDays) : null}
                   point1MaxDay={point1MaxDay ? parseInt(point1MaxDay) : null}
                   point2MinDay={point2MinDay ? parseInt(point2MinDay) : null}

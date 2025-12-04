@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Level1Chart from '../components/Level1Chart';
 import { fetchStockData } from '../lib/yahooFinance';
@@ -8,19 +8,34 @@ import { fetchStockData } from '../lib/yahooFinance';
 export default function Level1Page() {
   const router = useRouter();
   
-  // Одиночный режим
-  const [ticker, setTicker] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [testPeriodDays, setTestPeriodDays] = useState('');
+  // 🔥 ЗАГРУЖАЕМ из localStorage СРАЗУ в начальное состояние
+  const getInitialState = () => {
+    if (typeof window === 'undefined') return '';
+    try {
+      const saved = localStorage.getItem('level1_state');
+      if (saved) {
+        const state = JSON.parse(saved);
+        console.log('📥 Начальная загрузка Level 1:', state);
+        return state;
+      }
+    } catch (error) {
+      console.error('❌ Ошибка загрузки:', error);
+    }
+    return null;
+  };
+
+  const initialState = getInitialState();
   
-  // НОВЫЕ ПОЛЯ
-  const [point1MaxDay, setPoint1MaxDay] = useState('');
-  const [point2MinDay, setPoint2MinDay] = useState('');
-  const [minTradesPercent, setMinTradesPercent] = useState('');
-  
-  // Тестовый период для массовой обработки
-  const [batchTestPeriodDays, setBatchTestPeriodDays] = useState('');
+  // СОСТОЯНИЕ с начальными значениями из localStorage
+  const [ticker, setTicker] = useState(initialState?.ticker || '');
+  const [startDate, setStartDate] = useState(initialState?.startDate || '');
+  const [endDate, setEndDate] = useState(initialState?.endDate || '');
+  const [testPeriodDays, setTestPeriodDays] = useState(initialState?.testPeriodDays || '');
+  const [point1MaxDay, setPoint1MaxDay] = useState(initialState?.point1MaxDay || '');
+  const [point2MinDay, setPoint2MinDay] = useState(initialState?.point2MinDay || '');
+  const [minTradesPercent, setMinTradesPercent] = useState(initialState?.minTradesPercent || '');
+  const [batchTestPeriodDays, setBatchTestPeriodDays] = useState(initialState?.batchTestPeriodDays || '');
+  const [mode, setMode] = useState(initialState?.mode || 'single');
   
   const [chartData, setChartData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -29,7 +44,30 @@ export default function Level1Page() {
   // Массовый режим
   const [selectedFile, setSelectedFile] = useState(null);
   const [batchProcessing, setBatchProcessing] = useState(false);
-  const [mode, setMode] = useState('single');
+
+  // ========================================
+  // 🔥 СОХРАНЕНИЕ: только при изменении значений
+  // ========================================
+  useEffect(() => {
+    const state = {
+      ticker,
+      startDate,
+      endDate,
+      testPeriodDays,
+      point1MaxDay,
+      point2MinDay,
+      minTradesPercent,
+      batchTestPeriodDays,
+      mode
+    };
+    
+    try {
+      localStorage.setItem('level1_state', JSON.stringify(state));
+      console.log('💾 Level 1 сохранено:', state);
+    } catch (error) {
+      console.error('❌ Ошибка сохранения:', error);
+    }
+  }, [ticker, startDate, endDate, testPeriodDays, point1MaxDay, point2MinDay, minTradesPercent, batchTestPeriodDays, mode]);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -55,15 +93,9 @@ export default function Level1Page() {
       formData.append('endDate', endDate);
       formData.append('analysisType', 'level1');
       
-      // НОВЫЕ ПАРАМЕТРЫ
       if (point1MaxDay) formData.append('point1MaxDay', point1MaxDay);
       if (point2MinDay) formData.append('point2MinDay', point2MinDay);
       if (minTradesPercent) formData.append('minTradesPercent', minTradesPercent);
-      
-      // ТЕСТОВЫЙ ПЕРИОД ДЛЯ МАССОВОЙ ОБРАБОТКИ
-      if (batchTestPeriodDays) formData.append('testPeriodDays', batchTestPeriodDays);
-      
-      // ТЕСТОВЫЙ ПЕРИОД ДЛЯ МАССОВОЙ ОБРАБОТКИ
       if (batchTestPeriodDays) formData.append('testPeriodDays', batchTestPeriodDays);
 
       const response = await fetch('/api/batch', {
@@ -113,17 +145,14 @@ export default function Level1Page() {
         throw new Error('Данные не найдены для указанного периода');
       }
 
-      // Проверка тестового периода
       if (testPeriodDays && parseInt(testPeriodDays) >= data.length) {
         throw new Error(`Тестовый период (${testPeriodDays} дней) должен быть меньше общего количества дней (${data.length})`);
       }
       
-      // Проверка точки 1
       if (point1MaxDay && parseInt(point1MaxDay) > data.length) {
         throw new Error(`Точка 1 до дня (${point1MaxDay}) не может быть больше общего количества дней (${data.length})`);
       }
       
-      // Проверка точки 2
       if (point2MinDay && parseInt(point2MinDay) > data.length) {
         throw new Error(`Точка 2 от дня (${point2MinDay}) не может быть больше общего количества дней (${data.length})`);
       }
@@ -157,7 +186,7 @@ export default function Level1Page() {
           <button 
             className="px-8 py-3 bg-purple-500 text-white rounded-full font-medium shadow-lg"
           >
-            Level 1 (Exponential)
+            Level 1
           </button>
           <button 
             onClick={() => router.push('/level2')}
