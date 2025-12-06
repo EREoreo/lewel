@@ -4,7 +4,16 @@ import { useEffect, useRef, useState } from 'react';
 import { calculateExponentialSupportLine, calculateExponentialSupportLineWithTest } from '../lib/level1Analysis';
 import * as XLSX from 'xlsx';
 
-export default function Level1Chart({ data, ticker, testPeriodDays = null, point1MaxDay = null, point2MinDay = null, minTradesPercent = 0 }) {
+export default function Level1Chart({ 
+  data, 
+  ticker, 
+  testPeriodDays = null, 
+  point1MaxDay = null, 
+  point2MinDay = null, 
+  minTradesPercent = 0,
+  entryMultiplier = 1.0,  // 🆕
+  exitMultiplier = 1.0     // 🆕
+}) {
   const canvasRef = useRef(null);
   const [supportLine, setSupportLine] = useState(null);
   const [hoveredCandle, setHoveredCandle] = useState(null);
@@ -41,6 +50,8 @@ export default function Level1Chart({ data, ticker, testPeriodDays = null, point
         ['', ''],
         ['🧪 ИССЛЕДУЕМЫЙ УЧАСТОК (дни ' + (supportLine.testPeriodDays + 1) + '-' + (supportLine.researchEndIndex + 1) + ')'],
         ['Средний % в день', parseFloat(supportLine.researchStrategy?.avgPercentPerDay || 0)],
+        ['% для входа (×МН)', parseFloat(supportLine.researchStrategy?.entryPercent || 0)],
+        ['% для выхода (×МН)', parseFloat(supportLine.researchStrategy?.exitPercent || 0)],
         ['Трейды (чистые)', supportLine.researchStrategy?.totalTrades || 0],
         ['Всего дней', supportLine.researchStrategy?.totalDays || 0],
         ['Закрыто по факту', supportLine.researchStrategy?.hasFactClose || 0],
@@ -49,10 +60,9 @@ export default function Level1Chart({ data, ticker, testPeriodDays = null, point
         ['', ''],
         ['⚠️ ПЕРЕСЕЧЕНИЕ', supportLine.hasCrossing ? 'Да' : 'Нет'],
         ['', ''],
-        ['🎯 ПРОЦЕНТ ПОХОЖЕСТИ', parseFloat(supportLine.similarityPercent || 0)],
-        ['', ''],
-        ['📝 ФОРМУЛА СХОЖЕСТИ'],
-        ['(Иссл ср% в день / Тест ср% в день) × 100']
+        ['🔢 МНОЖИТЕЛИ'],
+        ['Множитель входа', supportLine.entryMultiplier || 1.0],
+        ['Множитель выхода', supportLine.exitMultiplier || 1.0]
       ];
     } else {
       // Обычный режим - с заголовками
@@ -149,8 +159,21 @@ export default function Level1Chart({ data, ticker, testPeriodDays = null, point
 
     // Рассчитываем экспоненциальную линию поддержки
     const support = testPeriodDays 
-      ? calculateExponentialSupportLineWithTest(data, testPeriodDays, point1MaxDay, point2MinDay, minTradesPercent)
-      : calculateExponentialSupportLine(data, point1MaxDay, point2MinDay, minTradesPercent);
+      ? calculateExponentialSupportLineWithTest(
+          data, 
+          testPeriodDays, 
+          point1MaxDay, 
+          point2MinDay, 
+          minTradesPercent,
+          entryMultiplier,  // 🆕
+          exitMultiplier    // 🆕
+        )
+      : calculateExponentialSupportLine(
+          data, 
+          point1MaxDay, 
+          point2MinDay, 
+          minTradesPercent
+        );
     setSupportLine(support);
 
     // Рисуем красную разделительную линию, если есть разделение
@@ -269,26 +292,7 @@ export default function Level1Chart({ data, ticker, testPeriodDays = null, point
 
     canvas.addEventListener('mousemove', handleMouseMove);
     return () => canvas.removeEventListener('mousemove', handleMouseMove);
-  }, [data, testPeriodDays, point1MaxDay, point2MinDay, minTradesPercent]);
-
-  // Функция для определения цвета схожести
-  const getSimilarityColor = (percent) => {
-    const value = parseFloat(percent);
-    if (value >= 90 && value <= 110) return 'text-green-600';
-    if (value >= 70 && value < 90) return 'text-yellow-600';
-    if (value > 110 && value <= 130) return 'text-blue-600';
-    return 'text-red-600';
-  };
-
-  // Функция для определения эмодзи схожести
-  const getSimilarityEmoji = (percent) => {
-    const value = parseFloat(percent);
-    if (value >= 95 && value <= 105) return '🎯';
-    if (value >= 90 && value <= 110) return '✅';
-    if (value >= 70 && value < 90) return '⚠️';
-    if (value > 110 && value <= 130) return '🚀';
-    return '❌';
-  };
+  }, [data, testPeriodDays, point1MaxDay, point2MinDay, minTradesPercent, entryMultiplier, exitMultiplier]);
 
   return (
     <div className="relative">
@@ -327,61 +331,6 @@ export default function Level1Chart({ data, ticker, testPeriodDays = null, point
               📥 Скачать Excel
             </button>
           </div>
-
-          {/* Процент похожести - ГЛАВНЫЙ БЛОК */}
-          {supportLine.testPeriodDays && supportLine.similarityPercent && (
-            <div className="p-6 bg-gradient-to-br from-purple-50 via-pink-50 to-purple-100 rounded-xl border-3 border-purple-400 shadow-xl">
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-xl font-bold text-purple-900">
-                  {getSimilarityEmoji(supportLine.similarityPercent)} Процент схожести
-                </h4>
-                <div className="text-xs text-purple-700 bg-white px-3 py-1 rounded-full">
-                  Иссл / Тест × 100
-                </div>
-              </div>
-              <div className={`text-6xl font-black text-center py-4 ${getSimilarityColor(supportLine.similarityPercent)}`}>
-                {supportLine.similarityPercent}%
-              </div>
-              <div className="mt-3 text-center text-sm text-purple-800">
-                <div className="flex justify-center gap-4 mt-2">
-                  <div className="bg-white px-3 py-1 rounded-lg">
-                    <span className="text-xs text-gray-600">Тест:</span>
-                    <span className="ml-1 font-semibold">{supportLine.testStrategy?.avgPercentPerDay}%</span>
-                  </div>
-                  <div className="text-2xl text-purple-600">→</div>
-                  <div className="bg-white px-3 py-1 rounded-lg">
-                    <span className="text-xs text-gray-600">Иссл:</span>
-                    <span className="ml-1 font-semibold">{supportLine.researchStrategy?.avgPercentPerDay}%</span>
-                  </div>
-                </div>
-              </div>
-              {/* Интерпретация */}
-              <div className="mt-4 p-3 bg-white rounded-lg text-center">
-                <div className="text-xs font-semibold text-gray-700 mb-1">Интерпретация:</div>
-                {parseFloat(supportLine.similarityPercent) >= 95 && parseFloat(supportLine.similarityPercent) <= 105 && (
-                  <div className="text-sm text-green-700">🎯 Идеальная стабильность!</div>
-                )}
-                {parseFloat(supportLine.similarityPercent) >= 90 && parseFloat(supportLine.similarityPercent) < 95 && (
-                  <div className="text-sm text-green-600">✅ Отличная стабильность</div>
-                )}
-                {parseFloat(supportLine.similarityPercent) > 105 && parseFloat(supportLine.similarityPercent) <= 110 && (
-                  <div className="text-sm text-green-600">✅ Отличная стабильность</div>
-                )}
-                {parseFloat(supportLine.similarityPercent) > 110 && parseFloat(supportLine.similarityPercent) <= 130 && (
-                  <div className="text-sm text-blue-600">🚀 Исследование лучше теста</div>
-                )}
-                {parseFloat(supportLine.similarityPercent) >= 70 && parseFloat(supportLine.similarityPercent) < 90 && (
-                  <div className="text-sm text-yellow-600">⚠️ Приемлемая стабильность</div>
-                )}
-                {parseFloat(supportLine.similarityPercent) < 70 && (
-                  <div className="text-sm text-red-600">❌ Слабая стабильность</div>
-                )}
-                {parseFloat(supportLine.similarityPercent) > 130 && (
-                  <div className="text-sm text-orange-600">⚠️ Возможна аномалия</div>
-                )}
-              </div>
-            </div>
-          )}
 
           {/* Тестируемый участок */}
           {supportLine.testStrategy && (
@@ -433,6 +382,11 @@ export default function Level1Chart({ data, ticker, testPeriodDays = null, point
             <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg border-2 border-emerald-300">
               <h4 className="font-semibold text-lg mb-3 text-emerald-900">
                 🧪 Исследуемый участок (дни {supportLine.testPeriodDays + 1}-{supportLine.researchEndIndex + 1}):
+                {supportLine.entryMultiplier && supportLine.entryMultiplier !== 1.0 && (
+                  <span className="ml-2 text-sm text-blue-600">
+                    (×{supportLine.entryMultiplier} вход, ×{supportLine.exitMultiplier} выход)
+                  </span>
+                )}
               </h4>
               {supportLine.hasCrossing && (
                 <div className="mb-3 p-2 bg-red-100 border border-red-300 rounded text-sm text-red-800">
@@ -471,9 +425,9 @@ export default function Level1Chart({ data, ticker, testPeriodDays = null, point
                   </div>
                 </div>
                 <div className="bg-white p-3 rounded-lg shadow-sm">
-                  <div className="text-xs text-gray-600 mb-1">Общая прибыль</div>
-                  <div className="text-xl font-bold text-green-600">
-                    {supportLine.researchStrategy.totalProfit}%
+                  <div className="text-xs text-gray-600 mb-1">% для входа (×МН)</div>
+                  <div className="text-lg font-bold text-blue-600">
+                    +{supportLine.researchStrategy.entryPercent}%
                   </div>
                 </div>
               </div>

@@ -17,8 +17,12 @@ export async function POST(request) {
     const point2MinDay = formData.get('point2MinDay');
     const minTradesPercent = formData.get('minTradesPercent');
     
-    // НОВОЕ: Тестовый период
+    // ТЕСТОВЫЙ ПЕРИОД
     const testPeriodDays = formData.get('testPeriodDays');
+    
+    // 🆕 МНОЖИТЕЛИ
+    const entryMultiplier = formData.get('entryMultiplier');
+    const exitMultiplier = formData.get('exitMultiplier');
 
     if (!file || !startDate || !endDate) {
       return NextResponse.json(
@@ -52,7 +56,11 @@ export async function POST(request) {
     console.log(`Период: ${startDate} - ${endDate}`);
     console.log(`Тип: ${analysisType}`);
     console.log(`Тестовый период: ${testPeriodDays || 'НЕТ'} дней`);
-    console.log(`Фильтры: точка1≤${point1MaxDay || 'любой'}, точка2≥${point2MinDay || 'любой'}, %сделок≥${minTradesPercent || 0}%\n`);
+    console.log(`Фильтры: точка1≤${point1MaxDay || 'любой'}, точка2≥${point2MinDay || 'любой'}, %сделок≥${minTradesPercent || 0}%`);
+    if (testPeriodDays) {
+      console.log(`Множители: вход × ${entryMultiplier || 1.0}, выход × ${exitMultiplier || 1.0}`);
+    }
+    console.log('');
 
     // Обрабатываем каждый тикер
     const results = [];
@@ -96,6 +104,10 @@ export async function POST(request) {
         const p2MinDay = point2MinDay ? parseInt(point2MinDay) : null;
         const minTrades = minTradesPercent ? parseFloat(minTradesPercent) : 0;
         const testPeriod = testPeriodDays ? parseInt(testPeriodDays) : null;
+        
+        // 🆕 Парсим множители
+        const entryMult = entryMultiplier ? parseFloat(entryMultiplier) : 1.0;
+        const exitMult = exitMultiplier ? parseFloat(exitMultiplier) : 1.0;
 
         // Проверка тестового периода
         if (testPeriod && testPeriod >= stockData.length) {
@@ -116,7 +128,9 @@ export async function POST(request) {
               testPeriod, 
               p1MaxDay, 
               p2MinDay, 
-              minTrades
+              minTrades,
+              entryMult,  // 🆕
+              exitMult    // 🆕
             );
           } else {
             console.log(`  📊 Используем обычный LEVEL 1`);
@@ -136,7 +150,9 @@ export async function POST(request) {
               testPeriod, 
               p1MaxDay, 
               p2MinDay, 
-              minTrades
+              minTrades,
+              entryMult,  // 🆕
+              exitMult    // 🆕
             );
           } else {
             console.log(`  📊 Используем обычный LEVEL 2`);
@@ -160,7 +176,6 @@ export async function POST(request) {
         const point2 = analysisResult.points[1];
 
         // Определяем какую стратегию использовать
-        // Если есть testPeriodDays - используем testStrategy, иначе tradingStrategy
         const strategy = analysisResult.testPeriodDays 
           ? analysisResult.testStrategy 
           : analysisResult.tradingStrategy;
@@ -171,13 +186,17 @@ export async function POST(request) {
           continue;
         }
 
-        // 💡 ЗАМЕНЁННЫЙ БЛОК: ФОРМИРУЕМ СТРОКУ РЕЗУЛЬТАТА
+        // 💡 ФОРМИРУЕМ СТРОКУ РЕЗУЛЬТАТА
         if (analysisResult.testPeriodDays) {
-          // Режим с тестовым периодом - ДВОЙНОЙ ФОРМАТ
+          // Режим с тестовым периодом - ОДНА СТРОКА
           
-          // ========================================
-          // СТРОКА 1: 🎯 Лучшая по СХОЖЕСТИ
-          // ========================================
+          // Проверяем есть ли результаты исследования
+          if (!analysisResult.researchStrategy) {
+            console.log(`  ⚠️ Нет исследуемого периода (пересечение) - пропускаем`);
+            skippedCount++;
+            continue;
+          }
+          
           results.push([
             ticker,
             parseFloat(point1.price.toFixed(2)),
@@ -193,8 +212,11 @@ export async function POST(request) {
             strategy.totalDays,
             strategy.hasFactClose,
             parseFloat(strategy.tradesPercent),
+            parseFloat(strategy.totalProfit),
             // ИССЛЕДОВАНИЕ
             parseFloat(analysisResult.researchStrategy.avgPercentPerDay),
+            parseFloat(analysisResult.researchStrategy.entryPercent),
+            parseFloat(analysisResult.researchStrategy.exitPercent),
             analysisResult.researchStrategy.totalTrades,
             analysisResult.researchStrategy.totalDays,
             analysisResult.researchStrategy.hasFactClose,
@@ -202,45 +224,11 @@ export async function POST(request) {
             parseFloat(analysisResult.researchStrategy.totalProfit),
             // МЕТРИКИ
             analysisResult.hasCrossing ? 'Да' : 'Нет',
-            parseFloat(analysisResult.similarityPercent),
-            '🎯 СХОЖЕСТЬ' // Тип комбинации
+            entryMult,
+            exitMult
           ]);
           
-          // ========================================
-          // СТРОКА 2: 🏆 Лучшая по ТЕСТУ
-          // ========================================
-          if (analysisResult.bestTestOnly) {
-            const testOnlyResult = analysisResult.bestTestOnly;
-            results.push([
-              ticker,
-              parseFloat(testOnlyResult.point1Price.toFixed(2)),
-              parseFloat(testOnlyResult.point2Price.toFixed(2)),
-              testOnlyResult.point1Index + 1,
-              testOnlyResult.point2Index + 1,
-              parseFloat(testOnlyResult.percentPerDayPercent),
-              // ТЕСТ
-              parseFloat(testOnlyResult.testStrategy.avgPercentPerDay),
-              parseFloat(testOnlyResult.testStrategy.entryPercent),
-              parseFloat(testOnlyResult.testStrategy.exitPercent),
-              testOnlyResult.testStrategy.totalTrades,
-              testOnlyResult.testStrategy.totalDays,
-              testOnlyResult.testStrategy.hasFactClose,
-              parseFloat(testOnlyResult.testStrategy.tradesPercent),
-              // ИССЛЕДОВАНИЕ (пусто для test-only)
-              '-',
-              '-',
-              '-',
-              '-',
-              '-',
-              '-',
-              // МЕТРИКИ
-              '-',
-              '-',
-              '🏆 ТЕСТ ТОЛЬКО' // Тип комбинации
-            ]);
-          }
-          
-          console.log(`  ✅ Обработан успешно | Схожесть: ${analysisResult.similarityPercent}% | Тест: ${analysisResult.bestTestOnly?.testStrategy.avgPercentPerDay}%`);
+          console.log(`  ✅ Обработан | Тест: ${strategy.avgPercentPerDay}% | Иссл: ${analysisResult.researchStrategy.avgPercentPerDay}%`);
         } else {
           // Обычный режим - стандартный формат (БЕЗ ЗНАКОВ %)
           results.push([
@@ -288,7 +276,7 @@ export async function POST(request) {
     const wb = XLSX.utils.book_new();
     const sheetName = analysisType === 'level1' ? 'Level1 Support' : 'Level2 Resistance';
     
-    // 💡 ЗАМЕНЁННЫЙ БЛОК: ЗАГОЛОВКИ
+    // 💡 ЗАГОЛОВКИ
     let headers;
     if (testPeriodDays) {
       // Расширенные заголовки для режима с тестом
@@ -307,8 +295,11 @@ export async function POST(request) {
         'ТЕСТ: Всего дней',
         'ТЕСТ: Закрыто по факту',
         'ТЕСТ: Процент сделок',
+        'ТЕСТ: Общая прибыль',
         // ИССЛЕДОВАНИЕ
         'ИССЛ: Средний % в день',
+        'ИССЛ: % для входа (×МН)',
+        'ИССЛ: % для выхода (×МН)',
         'ИССЛ: Трейды',
         'ИССЛ: Всего дней',
         'ИССЛ: Закрыто по факту',
@@ -316,8 +307,8 @@ export async function POST(request) {
         'ИССЛ: Общая прибыль',
         // МЕТРИКИ
         'Пересечение?',
-        'Процент схожести',
-        'Тип комбинации' // 🆕 НОВАЯ КОЛОНКА
+        'Множитель входа',
+        'Множитель выхода'
       ];
     } else {
       // Стандартные заголовки

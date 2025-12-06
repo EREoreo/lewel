@@ -35,6 +35,13 @@ export default function Level1Page() {
   const [point2MinDay, setPoint2MinDay] = useState(initialState?.point2MinDay || '');
   const [minTradesPercent, setMinTradesPercent] = useState(initialState?.minTradesPercent || '');
   const [batchTestPeriodDays, setBatchTestPeriodDays] = useState(initialState?.batchTestPeriodDays || '');
+  
+  // 🆕 МНОЖИТЕЛИ
+  const [entryMultiplier, setEntryMultiplier] = useState(initialState?.entryMultiplier || '1.0');
+  const [exitMultiplier, setExitMultiplier] = useState(initialState?.exitMultiplier || '1.0');
+  const [batchEntryMultiplier, setBatchEntryMultiplier] = useState(initialState?.batchEntryMultiplier || '1.0');
+  const [batchExitMultiplier, setBatchExitMultiplier] = useState(initialState?.batchExitMultiplier || '1.0');
+  
   const [mode, setMode] = useState(initialState?.mode || 'single');
   
   const [chartData, setChartData] = useState(null);
@@ -58,6 +65,10 @@ export default function Level1Page() {
       point2MinDay,
       minTradesPercent,
       batchTestPeriodDays,
+      entryMultiplier,        // 🆕
+      exitMultiplier,         // 🆕
+      batchEntryMultiplier,   // 🆕
+      batchExitMultiplier,    // 🆕
       mode
     };
     
@@ -67,7 +78,7 @@ export default function Level1Page() {
     } catch (error) {
       console.error('❌ Ошибка сохранения:', error);
     }
-  }, [ticker, startDate, endDate, testPeriodDays, point1MaxDay, point2MinDay, minTradesPercent, batchTestPeriodDays, mode]);
+  }, [ticker, startDate, endDate, testPeriodDays, point1MaxDay, point2MinDay, minTradesPercent, batchTestPeriodDays, entryMultiplier, exitMultiplier, batchEntryMultiplier, batchExitMultiplier, mode]);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -96,7 +107,18 @@ export default function Level1Page() {
       if (point1MaxDay) formData.append('point1MaxDay', point1MaxDay);
       if (point2MinDay) formData.append('point2MinDay', point2MinDay);
       if (minTradesPercent) formData.append('minTradesPercent', minTradesPercent);
-      if (batchTestPeriodDays) formData.append('testPeriodDays', batchTestPeriodDays);
+      
+      if (batchTestPeriodDays) {
+        formData.append('testPeriodDays', batchTestPeriodDays);
+      }
+      
+      // 🆕 МНОЖИТЕЛИ - передаём ВСЕГДА
+      if (batchEntryMultiplier) {
+        formData.append('entryMultiplier', batchEntryMultiplier);
+      }
+      if (batchExitMultiplier) {
+        formData.append('exitMultiplier', batchExitMultiplier);
+      }
 
       const response = await fetch('/api/batch', {
         method: 'POST',
@@ -279,7 +301,55 @@ export default function Level1Page() {
                 />
               </div>
 
-              {/* НОВЫЕ ПОЛЯ */}
+              {/* 🆕 МНОЖИТЕЛИ - показываем ВСЕГДА */}
+              <div className="border-t border-white/20 pt-3 mt-3">
+                <p className="text-white text-xs font-semibold mb-3">🔢 Множители уровней</p>
+                <p className="text-white/70 text-xs mb-3">
+                  {testPeriodDays 
+                    ? 'Уровни теста × множители = уровни исследования'
+                    : 'Оптимальные уровни × множители = финальные уровни'}
+                </p>
+                
+                <div className="relative mb-3">
+                  <label className="block text-white text-xs font-medium mb-1">
+                    Множитель для входа
+                  </label>
+                  <input
+                    type="number"
+                    min="0.1"
+                    max="10"
+                    step="0.1"
+                    placeholder="1.0 (без изменений)"
+                    value={entryMultiplier}
+                    onChange={(e) => setEntryMultiplier(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-gray-200 text-gray-800 placeholder-gray-500 text-xs focus:outline-none focus:ring-2 focus:ring-purple-400"
+                  />
+                  <p className="text-white/60 text-xs mt-1">
+                    Например: 2.0 = удвоить расстояние до входа
+                  </p>
+                </div>
+
+                <div className="relative">
+                  <label className="block text-white text-xs font-medium mb-1">
+                    Множитель для выхода
+                  </label>
+                  <input
+                    type="number"
+                    min="0.1"
+                    max="10"
+                    step="0.1"
+                    placeholder="1.0 (без изменений)"
+                    value={exitMultiplier}
+                    onChange={(e) => setExitMultiplier(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-gray-200 text-gray-800 placeholder-gray-500 text-xs focus:outline-none focus:ring-2 focus:ring-purple-400"
+                  />
+                  <p className="text-white/60 text-xs mt-1">
+                    Например: 1.5 = увеличить расстояние до выхода в 1.5 раза
+                  </p>
+                </div>
+              </div>
+
+              {/* ФИЛЬТРЫ ТОЧЕК */}
               <div className="border-t border-white/20 pt-3 mt-3">
                 <p className="text-white text-xs font-semibold mb-3">🎯 Фильтры точек</p>
                 
@@ -375,7 +445,7 @@ export default function Level1Page() {
                 className="w-full px-4 py-2 rounded-lg bg-gray-200 text-gray-800 focus:outline-none focus:ring-2 focus:ring-purple-400"
               />
 
-              {/* НОВОЕ ПОЛЕ: ТЕСТОВЫЙ ПЕРИОД ДЛЯ МАССОВОЙ ОБРАБОТКИ */}
+              {/* ТЕСТОВЫЙ ПЕРИОД ДЛЯ МАССОВОЙ ОБРАБОТКИ */}
               <div className="border-t border-white/20 pt-3">
                 <p className="text-white text-xs font-semibold mb-3">📅 Разделение периода</p>
                 
@@ -392,7 +462,41 @@ export default function Level1Page() {
                 </p>
               </div>
 
-              {/* НОВЫЕ ПОЛЯ ДЛЯ МАССОВОЙ ОБРАБОТКИ */}
+              {/* 🆕 МНОЖИТЕЛИ ДЛЯ МАССОВОЙ - показываем ВСЕГДА */}
+              <div className="border-t border-white/20 pt-3 mt-3">
+                <p className="text-white text-xs font-semibold mb-3">🔢 Множители уровней</p>
+                
+                <input
+                  type="number"
+                  min="0.1"
+                  max="10"
+                  step="0.1"
+                  placeholder="Множитель входа (1.0)"
+                  value={batchEntryMultiplier}
+                  onChange={(e) => setBatchEntryMultiplier(e.target.value)}
+                  className="w-full px-3 py-2 mb-2 rounded-lg bg-gray-200 text-gray-800 placeholder-gray-600 text-xs focus:outline-none focus:ring-2 focus:ring-purple-400"
+                />
+
+                <input
+                  type="number"
+                  min="0.1"
+                  max="10"
+                  step="0.1"
+                  placeholder="Множитель выхода (1.0)"
+                  value={batchExitMultiplier}
+                  onChange={(e) => setBatchExitMultiplier(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-gray-200 text-gray-800 placeholder-gray-600 text-xs focus:outline-none focus:ring-2 focus:ring-purple-400"
+                />
+                
+                <p className="text-white/70 text-xs mt-2">
+                  💡 {batchTestPeriodDays 
+                    ? 'Уровни теста × множители = уровни исследования'
+                    : 'Оптимальные уровни × множители = финальные уровни'}
+                </p>
+              </div>
+              )
+
+              {/* ФИЛЬТРЫ ДЛЯ МАССОВОЙ ОБРАБОТКИ */}
               <div className="border-t border-white/20 pt-3">
                 <p className="text-white text-xs font-semibold mb-3">🎯 Фильтры (необязательно)</p>
                 
@@ -463,9 +567,10 @@ export default function Level1Page() {
           </div>
 
           <div className="mt-6 p-3 bg-white/10 rounded-lg text-white/80 text-xs">
-            <p className="font-semibold mb-2">🆕 Новые фильтры:</p>
+            <p className="font-semibold mb-2">🆕 Новые возможности:</p>
             <ul className="space-y-1 list-disc list-inside">
               <li>Тестовый период: разделение данных</li>
+              <li>Множители: настройка уровней входа/выхода</li>
               <li>Точка 1 до дня: в начале</li>
               <li>Точка 2 от конца: в последних N днях</li>
               <li>Мин. % сделок: фильтр комбинаций</li>
@@ -509,7 +614,14 @@ export default function Level1Page() {
                       <li>• Трейды, Всего дней, Закрыто по факту</li>
                       <li>• Процент сделок</li>
                       {batchTestPeriodDays && (
-                        <li className="text-purple-900 font-semibold">• Тест и Исследование, Схожесть</li>
+                        <>
+                          <li className="text-purple-900 font-semibold">• Тест и Исследование</li>
+                          {(batchEntryMultiplier !== '1.0' || batchExitMultiplier !== '1.0') && (
+                            <li className="text-blue-600 font-semibold">
+                              • Множители: вход ×{batchEntryMultiplier}, выход ×{batchExitMultiplier}
+                            </li>
+                          )}
+                        </>
                       )}
                     </ul>
                   </div>
@@ -541,6 +653,12 @@ export default function Level1Page() {
                         {minTradesPercent && ` Мин%≥${minTradesPercent}`}
                       </div>
                     )}
+                    {/* 🆕 ПОКАЗЫВАЕМ МНОЖИТЕЛИ */}
+                    {testPeriodDays && (entryMultiplier !== '1.0' || exitMultiplier !== '1.0') && (
+                      <div className="text-xs text-blue-600 mt-1">
+                        Множители: вход ×{entryMultiplier}, выход ×{exitMultiplier}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <Level1Chart 
@@ -550,6 +668,8 @@ export default function Level1Page() {
                   point1MaxDay={point1MaxDay ? parseInt(point1MaxDay) : null}
                   point2MinDay={point2MinDay ? parseInt(point2MinDay) : null}
                   minTradesPercent={minTradesPercent ? parseFloat(minTradesPercent) : 0}
+                  entryMultiplier={entryMultiplier ? parseFloat(entryMultiplier) : 1.0}
+                  exitMultiplier={exitMultiplier ? parseFloat(exitMultiplier) : 1.0}
                 />
               </>
             )}
