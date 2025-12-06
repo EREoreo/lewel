@@ -2,6 +2,34 @@
 // Линия экспоненциальной поддержки (растущая)
 
 // ========================================
+// ФУНКЦИЯ ОКРУГЛЕНИЯ ЦЕН (1-5 вниз, 6-9 вверх)
+// ========================================
+function roundPrices(data) {
+  // Функция для округления: 1-5 вниз, 6-9 вверх
+  const roundPrice = (price) => {
+    const shifted = price * 100;
+    const floored = Math.floor(shifted);
+    const decimal = shifted - floored;
+    
+    // Если дробная часть <= 0.5 → вниз
+    // Если дробная часть > 0.5 → вверх
+    if (decimal <= 0.5) {
+      return floored / 100;
+    } else {
+      return Math.ceil(shifted) / 100;
+    }
+  };
+  
+  return data.map(candle => ({
+    ...candle,
+    low: roundPrice(candle.low),
+    high: roundPrice(candle.high),
+    open: roundPrice(candle.open),
+    close: roundPrice(candle.close)
+  }));
+}
+
+// ========================================
 // СИМУЛЯЦИЯ ТОРГОВЛИ
 // ========================================
 function simulateTrading(data, curvePoints, entryPercent, exitPercent) {
@@ -130,6 +158,9 @@ function optimizeLevel1TradingStrategy(data, curvePoints, minTradesPercent = 0) 
 // ========================================
 export function calculateExponentialSupportLine(data, point1MaxDay = null, point2MinDay = null, minTradesPercent = 0) {
   if (!data || data.length < 2) return null;
+  
+  // 🆕 ОКРУГЛЯЕМ ЦЕНЫ ДО 2 ЗНАКОВ (1-5 вниз, 6-9 вверх)
+  data = roundPrices(data);
   
   let absoluteMinIndex = 0;
   let absoluteMinPrice = data[0].low;
@@ -264,6 +295,9 @@ export function calculateExponentialSupportLineWithTest(data, testPeriodDays, po
   if (testPeriodDays >= data.length) {
     return calculateExponentialSupportLine(data, point1MaxDay, point2MinDay, minTradesPercent);
   }
+
+  // 🆕 ОКРУГЛЯЕМ ЦЕНЫ ДО 2 ЗНАКОВ (1-5 вниз, 6-9 вверх)
+  data = roundPrices(data);
 
   console.log('\n🔬 НАЧАЛО ПОИСКА ЛУЧШИХ КОМБИНАЦИЙ (LEVEL 1)');
   console.log(`Тестовый участок: дни 1-${testPeriodDays}`);
