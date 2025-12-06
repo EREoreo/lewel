@@ -4,7 +4,16 @@ import { useEffect, useRef, useState } from 'react';
 import { calculateExponentialResistanceLine, calculateExponentialResistanceLineWithTest } from '../lib/level2Analysis';
 import * as XLSX from 'xlsx';
 
-export default function Level2Chart({ data, ticker, testPeriodDays = null, point1MaxDay = null, point2MinDay = null, minTradesPercent = 0 }) {
+export default function Level2Chart({ 
+  data, 
+  ticker, 
+  testPeriodDays = null, 
+  point1MaxDay = null, 
+  point2MinDay = null, 
+  minTradesPercent = 0,
+  entryMultiplier = 0,  // 🆕
+  exitMultiplier = 0     // 🆕
+}) {
   const canvasRef = useRef(null);
   const [resistanceLine, setResistanceLine] = useState(null);
   const [hoveredCandle, setHoveredCandle] = useState(null);
@@ -18,7 +27,6 @@ export default function Level2Chart({ data, ticker, testPeriodDays = null, point
 
     let excelData;
     if (resistanceLine.testPeriodDays) {
-      // Режим с разделением на участки - РАСШИРЕННЫЙ ФОРМАТ
       excelData = [
         ['Тикер', ticker],
         ['', ''],
@@ -31,7 +39,7 @@ export default function Level2Chart({ data, ticker, testPeriodDays = null, point
         ['', ''],
         ['🔬 ТЕСТИРУЕМЫЙ УЧАСТОК (дни 1-' + resistanceLine.testPeriodDays + ')'],
         ['Средний % в день', parseFloat(strategy?.avgPercentPerDay || 0)],
-        ['% для входа (SHORT)', parseFloat(strategy?.entryPercent || 0)],
+        ['% для входа', parseFloat(strategy?.entryPercent || 0)],
         ['% для выхода', parseFloat(strategy?.exitPercent || 0)],
         ['Трейды (чистые)', strategy?.totalTrades || 0],
         ['Всего дней', strategy?.totalDays || 0],
@@ -41,6 +49,8 @@ export default function Level2Chart({ data, ticker, testPeriodDays = null, point
         ['', ''],
         ['🧪 ИССЛЕДУЕМЫЙ УЧАСТОК (дни ' + (resistanceLine.testPeriodDays + 1) + '-' + (resistanceLine.researchEndIndex + 1) + ')'],
         ['Средний % в день', parseFloat(resistanceLine.researchStrategy?.avgPercentPerDay || 0)],
+        ['% для входа (×МН)', parseFloat(resistanceLine.researchStrategy?.entryPercent || 0)],
+        ['% для выхода (×МН)', parseFloat(resistanceLine.researchStrategy?.exitPercent || 0)],
         ['Трейды (чистые)', resistanceLine.researchStrategy?.totalTrades || 0],
         ['Всего дней', resistanceLine.researchStrategy?.totalDays || 0],
         ['Закрыто по факту', resistanceLine.researchStrategy?.hasFactClose || 0],
@@ -49,15 +59,12 @@ export default function Level2Chart({ data, ticker, testPeriodDays = null, point
         ['', ''],
         ['⚠️ ПЕРЕСЕЧЕНИЕ', resistanceLine.hasCrossing ? 'Да' : 'Нет'],
         ['', ''],
-        ['🎯 ПРОЦЕНТ ПОХОЖЕСТИ', parseFloat(resistanceLine.similarityPercent || 0)],
-        ['', ''],
-        ['📝 ФОРМУЛА СХОЖЕСТИ'],
-        ['(Иссл ср% в день / Тест ср% в день) × 100']
+        ['🔢 МНОЖИТЕЛИ'],
+        ['Множитель входа', resistanceLine.entryMultiplier || 0],
+        ['Множитель выхода', resistanceLine.exitMultiplier || 0]
       ];
     } else {
-      // Обычный режим - с заголовками (БЕЗ ЗНАКОВ %)
       excelData = [
-        // ЗАГОЛОВКИ
         [
           'Тикер',
           'Цена точки 1',
@@ -66,14 +73,13 @@ export default function Level2Chart({ data, ticker, testPeriodDays = null, point
           'День 2',
           'Процент в день',
           'Средний % в день',
-          '% для входа (SHORT)',
+          '% для входа',
           '% для выхода',
           'Трейды',
           'Всего дней',
           'Закрыто по факту',
           'Процент сделок'
         ],
-        // ДАННЫЕ (без знаков %)
         [
           ticker,
           parseFloat(point1.price.toFixed(2)),
@@ -127,7 +133,6 @@ export default function Level2Chart({ data, ticker, testPeriodDays = null, point
       return padding + index * candleSpacing + candleSpacing / 2;
     };
 
-    // Сетка
     ctx.strokeStyle = '#e5e7eb';
     ctx.lineWidth = 0.5;
     
@@ -147,16 +152,26 @@ export default function Level2Chart({ data, ticker, testPeriodDays = null, point
       ctx.fillText(`$${price.toFixed(2)}`, padding - 10, y + 4);
     }
 
-    // Рассчитываем линию с фильтрами
-    let resistance;
-    if (testPeriodDays && testPeriodDays < data.length) {
-      resistance = calculateExponentialResistanceLineWithTest(data, testPeriodDays, point1MaxDay, point2MinDay, minTradesPercent);
-    } else {
-      resistance = calculateExponentialResistanceLine(data, point1MaxDay, point2MinDay, minTradesPercent);
-    }
+    const resistance = testPeriodDays 
+      ? calculateExponentialResistanceLineWithTest(
+          data, 
+          testPeriodDays, 
+          point1MaxDay, 
+          point2MinDay, 
+          minTradesPercent,
+          entryMultiplier,  // 🆕
+          exitMultiplier    // 🆕
+        )
+      : calculateExponentialResistanceLine(
+          data, 
+          point1MaxDay, 
+          point2MinDay, 
+          minTradesPercent,
+          entryMultiplier,  // 🆕
+          exitMultiplier    // 🆕
+        );
     setResistanceLine(resistance);
 
-    // Рисуем красную разделительную линию
     if (resistance && resistance.testPeriodDays) {
       const dividerX = indexToX(resistance.testPeriodDays);
       ctx.strokeStyle = '#ef4444';
@@ -177,9 +192,8 @@ export default function Level2Chart({ data, ticker, testPeriodDays = null, point
       ctx.fillText('🧪 исследуемый', dividerX + (canvas.width - padding - dividerX) / 2, padding - 10);
     }
 
-    // Рисуем кривую
     if (resistance && resistance.curvePoints) {
-      ctx.strokeStyle = '#dc2626';
+      ctx.strokeStyle = '#f97316';
       ctx.lineWidth = 3;
       ctx.beginPath();
       
@@ -196,11 +210,9 @@ export default function Level2Chart({ data, ticker, testPeriodDays = null, point
       
       ctx.stroke();
       
-      // Если есть пересечение
       if (resistance.hasCrossing && resistance.researchEndIndex < data.length - 1) {
         ctx.strokeStyle = '#ef4444';
         ctx.lineWidth = 3;
-        ctx.setLineDash([3, 3]);
         ctx.beginPath();
         
         for (let i = resistance.researchEndIndex + 1; i < resistance.curvePoints.length; i++) {
@@ -216,16 +228,14 @@ export default function Level2Chart({ data, ticker, testPeriodDays = null, point
         }
         
         ctx.stroke();
-        ctx.setLineDash([]);
       }
       
-      ctx.fillStyle = '#dc2626';
+      ctx.fillStyle = '#f97316';
       ctx.font = 'bold 12px sans-serif';
       ctx.textAlign = 'left';
-      ctx.fillText('Resistance (Exponential)', canvas.width - padding + 10, priceToY(resistance.endPrice) + 4);
+      ctx.fillText('Resistance', canvas.width - padding + 10, priceToY(resistance.endPrice) + 4);
     }
 
-    // Свечи
     data.forEach((candle, index) => {
       const x = indexToX(index);
       const isGreen = candle.close > candle.open;
@@ -272,25 +282,7 @@ export default function Level2Chart({ data, ticker, testPeriodDays = null, point
 
     canvas.addEventListener('mousemove', handleMouseMove);
     return () => canvas.removeEventListener('mousemove', handleMouseMove);
-  }, [data, testPeriodDays, point1MaxDay, point2MinDay, minTradesPercent]);
-
-  // Функции для цвета и эмодзи схожести (аналогично Level1)
-  const getSimilarityColor = (percent) => {
-    const value = parseFloat(percent);
-    if (value >= 90 && value <= 110) return 'text-green-600';
-    if (value >= 70 && value < 90) return 'text-yellow-600';
-    if (value > 110 && value <= 130) return 'text-blue-600';
-    return 'text-red-600';
-  };
-
-  const getSimilarityEmoji = (percent) => {
-    const value = parseFloat(percent);
-    if (value >= 95 && value <= 105) return '🎯';
-    if (value >= 90 && value <= 110) return '✅';
-    if (value >= 70 && value < 90) return '⚠️';
-    if (value > 110 && value <= 130) return '🚀';
-    return '❌';
-  };
+  }, [data, testPeriodDays, point1MaxDay, point2MinDay, minTradesPercent, entryMultiplier, exitMultiplier]);
 
   return (
     <div className="relative">
@@ -324,75 +316,25 @@ export default function Level2Chart({ data, ticker, testPeriodDays = null, point
           <div className="flex justify-end mb-2">
             <button
               onClick={downloadExcel}
-              className="px-6 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+              className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
             >
               📥 Скачать Excel
             </button>
           </div>
 
-          {/* Процент похожести - ГЛАВНЫЙ БЛОК */}
-          {resistanceLine.testPeriodDays && resistanceLine.similarityPercent && (
-            <div className="p-6 bg-gradient-to-br from-orange-50 via-red-50 to-orange-100 rounded-xl border-3 border-orange-400 shadow-xl">
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-xl font-bold text-orange-900">
-                  {getSimilarityEmoji(resistanceLine.similarityPercent)} Процент схожести
-                </h4>
-                <div className="text-xs text-orange-700 bg-white px-3 py-1 rounded-full">
-                  Иссл / Тест × 100
-                </div>
-              </div>
-              <div className={`text-6xl font-black text-center py-4 ${getSimilarityColor(resistanceLine.similarityPercent)}`}>
-                {resistanceLine.similarityPercent}%
-              </div>
-              <div className="mt-3 text-center text-sm text-orange-800">
-                <div className="flex justify-center gap-4 mt-2">
-                  <div className="bg-white px-3 py-1 rounded-lg">
-                    <span className="text-xs text-gray-600">Тест:</span>
-                    <span className="ml-1 font-semibold">{resistanceLine.testStrategy?.avgPercentPerDay}%</span>
-                  </div>
-                  <div className="text-2xl text-orange-600">→</div>
-                  <div className="bg-white px-3 py-1 rounded-lg">
-                    <span className="text-xs text-gray-600">Иссл:</span>
-                    <span className="ml-1 font-semibold">{resistanceLine.researchStrategy?.avgPercentPerDay}%</span>
-                  </div>
-                </div>
-              </div>
-              {/* Интерпретация */}
-              <div className="mt-4 p-3 bg-white rounded-lg text-center">
-                <div className="text-xs font-semibold text-gray-700 mb-1">Интерпретация:</div>
-                {parseFloat(resistanceLine.similarityPercent) >= 95 && parseFloat(resistanceLine.similarityPercent) <= 105 && (
-                  <div className="text-sm text-green-700">🎯 Идеальная стабильность!</div>
-                )}
-                {parseFloat(resistanceLine.similarityPercent) >= 90 && parseFloat(resistanceLine.similarityPercent) < 95 && (
-                  <div className="text-sm text-green-600">✅ Отличная стабильность</div>
-                )}
-                {parseFloat(resistanceLine.similarityPercent) > 105 && parseFloat(resistanceLine.similarityPercent) <= 110 && (
-                  <div className="text-sm text-green-600">✅ Отличная стабильность</div>
-                )}
-                {parseFloat(resistanceLine.similarityPercent) > 110 && parseFloat(resistanceLine.similarityPercent) <= 130 && (
-                  <div className="text-sm text-blue-600">🚀 Исследование лучше теста</div>
-                )}
-                {parseFloat(resistanceLine.similarityPercent) >= 70 && parseFloat(resistanceLine.similarityPercent) < 90 && (
-                  <div className="text-sm text-yellow-600">⚠️ Приемлемая стабильность</div>
-                )}
-                {parseFloat(resistanceLine.similarityPercent) < 70 && (
-                  <div className="text-sm text-red-600">❌ Слабая стабильность</div>
-                )}
-                {parseFloat(resistanceLine.similarityPercent) > 130 && (
-                  <div className="text-sm text-orange-600">⚠️ Возможна аномалия</div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Блок с тестовым периодом */}
-          {resistanceLine.testPeriodDays && resistanceLine.testStrategy && (
+          {resistanceLine.testStrategy && (
             <div className="p-4 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg border-2 border-blue-300">
-              <h4 className="font-semibold text-lg mb-3 text-blue-900">🔬 Тестируемый период (дни 1-{resistanceLine.testPeriodDays}):</h4>
-              <div className="grid grid-cols-3 gap-3">
+              <h4 className="font-semibold text-lg mb-3 text-blue-900">🔬 Тестируемый участок (дни 1-{resistanceLine.testPeriodDays}):</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">Средний % в день</div>
+                  <div className="text-2xl font-bold text-blue-600">
+                    {resistanceLine.testStrategy.avgPercentPerDay}%
+                  </div>
+                </div>
                 <div className="bg-white p-3 rounded-lg shadow-sm">
                   <div className="text-xs text-gray-600 mb-1">Трейды (чистые)</div>
-                  <div className="text-xl font-bold text-blue-600">
+                  <div className="text-2xl font-bold text-blue-600">
                     {resistanceLine.testStrategy.totalTrades}
                   </div>
                 </div>
@@ -415,32 +357,46 @@ export default function Level2Chart({ data, ticker, testPeriodDays = null, point
                   </div>
                 </div>
                 <div className="bg-white p-3 rounded-lg shadow-sm">
-                  <div className="text-xs text-gray-600 mb-1">% для входа (SHORT)</div>
-                  <div className="text-xl font-bold text-red-600">
+                  <div className="text-xs text-gray-600 mb-1">% для входа</div>
+                  <div className="text-lg font-bold text-purple-600">
                     -{resistanceLine.testStrategy.entryPercent}%
                   </div>
                 </div>
                 <div className="bg-white p-3 rounded-lg shadow-sm">
-                  <div className="text-xs text-gray-600 mb-1">Средний % в день</div>
-                  <div className="text-xl font-bold text-green-600">
-                    {resistanceLine.testStrategy.avgPercentPerDay}%
+                  <div className="text-xs text-gray-600 mb-1">% для выхода</div>
+                  <div className="text-lg font-bold text-orange-600">
+                    -{resistanceLine.testStrategy.exitPercent}%
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Блок с исследуемым периодом */}
-          {resistanceLine.testPeriodDays && resistanceLine.researchStrategy && (
-            <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border-2 border-green-300">
-              <h4 className="font-semibold text-lg mb-3 text-green-900">
-                🧪 Исследуемый период (дни {resistanceLine.testPeriodDays + 1}-{resistanceLine.researchEndIndex + 1}):
-                {resistanceLine.hasCrossing && <span className="ml-2 text-orange-600">⚠️ Есть пересечение</span>}
+          {resistanceLine.researchStrategy && (
+            <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg border-2 border-emerald-300">
+              <h4 className="font-semibold text-lg mb-3 text-emerald-900">
+                🧪 Исследуемый участок (дни {resistanceLine.testPeriodDays + 1}-{resistanceLine.researchEndIndex + 1}):
+                {resistanceLine.entryMultiplier && resistanceLine.entryMultiplier !== 0 && (
+                  <span className="ml-2 text-sm text-blue-600">
+                    (×{resistanceLine.entryMultiplier} вход, ×{resistanceLine.exitMultiplier} выход)
+                  </span>
+                )}
               </h4>
-              <div className="grid grid-cols-3 gap-3">
+              {resistanceLine.hasCrossing && (
+                <div className="mb-3 p-2 bg-red-100 border border-red-300 rounded text-sm text-red-800">
+                  ⚠️ Линия пересекла свечу - расчеты до дня {resistanceLine.researchEndIndex + 1}
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">Средний % в день</div>
+                  <div className="text-2xl font-bold text-emerald-600">
+                    {resistanceLine.researchStrategy.avgPercentPerDay}%
+                  </div>
+                </div>
                 <div className="bg-white p-3 rounded-lg shadow-sm">
                   <div className="text-xs text-gray-600 mb-1">Трейды (чистые)</div>
-                  <div className="text-xl font-bold text-blue-600">
+                  <div className="text-2xl font-bold text-blue-600">
                     {resistanceLine.researchStrategy.totalTrades}
                   </div>
                 </div>
@@ -463,29 +419,35 @@ export default function Level2Chart({ data, ticker, testPeriodDays = null, point
                   </div>
                 </div>
                 <div className="bg-white p-3 rounded-lg shadow-sm">
-                  <div className="text-xs text-gray-600 mb-1">Общая прибыль</div>
-                  <div className="text-xl font-bold text-green-600">
-                    {resistanceLine.researchStrategy.totalProfit}%
+                  <div className="text-xs text-gray-600 mb-1">% для входа (×МН)</div>
+                  <div className="text-lg font-bold text-blue-600">
+                    -{resistanceLine.researchStrategy.entryPercent}%
                   </div>
                 </div>
                 <div className="bg-white p-3 rounded-lg shadow-sm">
-                  <div className="text-xs text-gray-600 mb-1">Средний % в день</div>
-                  <div className="text-xl font-bold text-green-600">
-                    {resistanceLine.researchStrategy.avgPercentPerDay}%
+                  <div className="text-xs text-gray-600 mb-1">% для выхода (×МН)</div>
+                  <div className="text-lg font-bold text-orange-600">
+                    -{resistanceLine.researchStrategy.exitPercent}%
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Стандартная стратегия (если нет разделения) */}
           {resistanceLine.tradingStrategy && !resistanceLine.testPeriodDays && (
-            <div className="p-4 bg-gradient-to-r from-red-50 to-orange-50 rounded-lg border-2 border-red-300">
-              <h4 className="font-semibold text-lg mb-3 text-red-900">🎯 Оптимальная торговая стратегия (SHORT):</h4>
+            <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg border-2 border-emerald-300">
+              <h4 className="font-semibold text-lg mb-3 text-emerald-900">
+                🎯 Оптимальная торговая стратегия:
+                {resistanceLine.entryMultiplier && resistanceLine.entryMultiplier !== 0 && (
+                  <span className="ml-2 text-sm text-blue-600">
+                    (×{resistanceLine.entryMultiplier} вход, ×{resistanceLine.exitMultiplier} выход)
+                  </span>
+                )}
+              </h4>
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-white p-3 rounded-lg shadow-sm">
                   <div className="text-xs text-gray-600 mb-1">Средний % в день</div>
-                  <div className="text-2xl font-bold text-red-600">
+                  <div className="text-2xl font-bold text-emerald-600">
                     {resistanceLine.tradingStrategy.avgPercentPerDay}%
                   </div>
                 </div>
@@ -514,14 +476,14 @@ export default function Level2Chart({ data, ticker, testPeriodDays = null, point
                   </div>
                 </div>
                 <div className="bg-white p-3 rounded-lg shadow-sm">
-                  <div className="text-xs text-gray-600 mb-1">% для входа (SHORT)</div>
+                  <div className="text-xs text-gray-600 mb-1">% для входа</div>
                   <div className="text-xl font-bold text-purple-600">
                     -{resistanceLine.tradingStrategy.entryPercent}%
                   </div>
                   <div className="text-xs text-gray-500 mt-1">от уровня сопротивления</div>
                 </div>
                 <div className="bg-white p-3 rounded-lg shadow-sm">
-                  <div className="text-xs text-gray-600 mb-1">% для выхода (выкуп)</div>
+                  <div className="text-xs text-gray-600 mb-1">% для выхода</div>
                   <div className="text-xl font-bold text-orange-600">
                     -{resistanceLine.tradingStrategy.exitPercent}%
                   </div>
@@ -534,8 +496,8 @@ export default function Level2Chart({ data, ticker, testPeriodDays = null, point
             </div>
           )}
 
-          <div className="p-4 bg-red-50 rounded-lg border-2 border-red-200">
-            <h4 className="font-semibold text-base mb-3 text-red-900">📊 Точки экспоненциальной линии сопротивления:</h4>
+          <div className="p-4 bg-orange-50 rounded-lg border-2 border-orange-200">
+            <h4 className="font-semibold text-base mb-3 text-orange-900">📊 Точки экспоненциальной линии сопротивления:</h4>
             <div className="space-y-3">
               {resistanceLine.points.map((point, idx) => {
                 const candle = data[point.index];
@@ -544,7 +506,7 @@ export default function Level2Chart({ data, ticker, testPeriodDays = null, point
                   <div key={idx} className="bg-white p-3 rounded-lg shadow-sm">
                     <div className="flex items-center justify-between">
                       <div>
-                        <span className="font-semibold text-red-700">Точка {idx + 1}:</span>
+                        <span className="font-semibold text-orange-700">Точка {idx + 1}:</span>
                         <span className="ml-2 text-lg font-bold text-gray-800">${point.price.toFixed(2)}</span>
                       </div>
                       <div className="text-right">
@@ -578,12 +540,12 @@ export default function Level2Chart({ data, ticker, testPeriodDays = null, point
                 <span className="ml-2 font-medium text-black">${resistanceLine.endPrice.toFixed(2)}</span>
               </div>
               <div>
-                <span className="text-gray-600">Процент изменения в день:</span>
-                <span className="ml-2 font-medium text-red-600">{resistanceLine.percentPerDayPercent}%</span>
+                <span className="text-gray-600">Процент падения в день:</span>
+                <span className="ml-2 font-medium text-orange-600">{resistanceLine.percentPerDayPercent}%</span>
               </div>
               <div>
                 <span className="text-gray-600">Количество касаний:</span>
-                <span className="ml-2 font-medium text-red-600">{resistanceLine.touches}</span>
+                <span className="ml-2 font-medium text-green-600">{resistanceLine.touches}</span>
               </div>
             </div>
           </div>

@@ -11,8 +11,8 @@ export default function Level1Chart({
   point1MaxDay = null, 
   point2MinDay = null, 
   minTradesPercent = 0,
-  entryMultiplier = 1.0,  // 🆕
-  exitMultiplier = 1.0     // 🆕
+  entryMultiplier = 0,  // 🆕
+  exitMultiplier = 0     // 🆕
 }) {
   const canvasRef = useRef(null);
   const [supportLine, setSupportLine] = useState(null);
@@ -373,6 +373,12 @@ export default function Level1Chart({
                     +{supportLine.testStrategy.entryPercent}%
                   </div>
                 </div>
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">% для выхода</div>
+                  <div className="text-lg font-bold text-orange-600">
+                    +{supportLine.testStrategy.exitPercent}%
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -382,7 +388,7 @@ export default function Level1Chart({
             <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg border-2 border-emerald-300">
               <h4 className="font-semibold text-lg mb-3 text-emerald-900">
                 🧪 Исследуемый участок (дни {supportLine.testPeriodDays + 1}-{supportLine.researchEndIndex + 1}):
-                {supportLine.entryMultiplier && supportLine.entryMultiplier !== 1.0 && (
+                {supportLine.entryMultiplier && supportLine.entryMultiplier !== 0 && (
                   <span className="ml-2 text-sm text-blue-600">
                     (×{supportLine.entryMultiplier} вход, ×{supportLine.exitMultiplier} выход)
                   </span>
@@ -430,6 +436,12 @@ export default function Level1Chart({
                     +{supportLine.researchStrategy.entryPercent}%
                   </div>
                 </div>
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <div className="text-xs text-gray-600 mb-1">% для выхода (×МН)</div>
+                  <div className="text-lg font-bold text-orange-600">
+                    +{supportLine.researchStrategy.exitPercent}%
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -437,7 +449,14 @@ export default function Level1Chart({
           {/* Стандартная стратегия (если нет разделения) */}
           {supportLine.tradingStrategy && !supportLine.testPeriodDays && (
             <div className="p-4 bg-gradient-to-r from-emerald-50 to-teal-50 rounded-lg border-2 border-emerald-300">
-              <h4 className="font-semibold text-lg mb-3 text-emerald-900">🎯 Оптимальная торговая стратегия:</h4>
+              <h4 className="font-semibold text-lg mb-3 text-emerald-900">
+                🎯 Оптимальная торговая стратегия:
+                {supportLine.entryMultiplier && supportLine.entryMultiplier !== 0 && (
+                  <span className="ml-2 text-sm text-blue-600">
+                    (×{supportLine.entryMultiplier} вход, ×{supportLine.exitMultiplier} выход)
+                  </span>
+                )}
+              </h4>
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-white p-3 rounded-lg shadow-sm">
                   <div className="text-xs text-gray-600 mb-1">Средний % в день</div>

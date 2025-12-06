@@ -153,7 +153,7 @@ function optimizeLevel1TradingStrategy(data, curvePoints, minTradesPercent = 0) 
 // ========================================
 // ОСНОВНАЯ ФУНКЦИЯ (БЕЗ тестового периода)
 // ========================================
-export function calculateExponentialSupportLine(data, point1MaxDay = null, point2MinDay = null, minTradesPercent = 0) {
+export function calculateExponentialSupportLine(data, point1MaxDay = null, point2MinDay = null, minTradesPercent = 0, entryMultiplier = 0, exitMultiplier = 0) {
   if (!data || data.length < 2) return null;
   
   data = roundPrices(data);
@@ -271,6 +271,34 @@ export function calculateExponentialSupportLine(data, point1MaxDay = null, point
     return null;
   }
   
+  // 🆕 ПРИМЕНЯЕМ МНОЖИТЕЛИ К СТРАТЕГИИ
+  // Новая формула:
+  // новый ур вх = ур входа + (ур вых - ур входа) * множ входа
+  // новый ур вых = ур вых - (ур вых - ур входа) * множ выхода
+  let finalStrategy = tradingStrategy;
+  if (tradingStrategy && (entryMultiplier !== 0 || exitMultiplier !== 0)) {
+    const originalEntry = tradingStrategy.entryPercent;
+    const originalExit = tradingStrategy.exitPercent;
+    const range = originalExit - originalEntry;
+    
+    const newEntry = parseFloat((originalEntry + range * entryMultiplier).toFixed(2));
+    const newExit = parseFloat((originalExit - range * exitMultiplier).toFixed(2));
+    
+    // Пересчитываем стратегию с новыми уровнями
+    const simulation = simulateTrading(data, curvePoints, newEntry, newExit);
+    
+    finalStrategy = {
+      entryPercent: parseFloat(newEntry.toFixed(2)),
+      exitPercent: parseFloat(newExit.toFixed(2)),
+      avgPercentPerDay: parseFloat(simulation.avgPercentPerDay.toFixed(2)),
+      totalTrades: simulation.totalTrades,
+      totalDays: simulation.totalDays,
+      hasFactClose: simulation.hasFactClose,
+      tradesPercent: parseFloat(simulation.tradesPercent.toFixed(2)),
+      totalProfit: parseFloat(simulation.totalProfit.toFixed(2))
+    };
+  }
+  
   return {
     points: [point1, bestPoint2],
     curvePoints: curvePoints,
@@ -279,14 +307,16 @@ export function calculateExponentialSupportLine(data, point1MaxDay = null, point
     touches: Math.max(touches, 2),
     startPrice: curvePoints[0].price,
     endPrice: curvePoints[curvePoints.length - 1].price,
-    tradingStrategy: tradingStrategy
+    tradingStrategy: finalStrategy,
+    entryMultiplier: entryMultiplier,  // 🆕 сохраняем множители
+    exitMultiplier: exitMultiplier     // 🆕
   };
 }
 
 // ========================================
 // 🆕 ФУНКЦИЯ С ТЕСТОВЫМ ПЕРИОДОМ И МНОЖИТЕЛЯМИ
 // ========================================
-export function calculateExponentialSupportLineWithTest(data, testPeriodDays, point1MaxDay = null, point2MinDay = null, minTradesPercent = 0, entryMultiplier = 1.0, exitMultiplier = 1.0) {
+export function calculateExponentialSupportLineWithTest(data, testPeriodDays, point1MaxDay = null, point2MinDay = null, minTradesPercent = 0, entryMultiplier = 0, exitMultiplier = 0) {
   if (!data || data.length < 2) return null;
   if (testPeriodDays >= data.length) {
     return calculateExponentialSupportLine(data, point1MaxDay, point2MinDay, minTradesPercent);
@@ -462,12 +492,20 @@ export function calculateExponentialSupportLineWithTest(data, testPeriodDays, po
   }));
 
   // ПРИМЕНЯЕМ МНОЖИТЕЛИ
-  const modifiedEntryPercent = parseFloat(bestCombo.testStrategy.entryPercent) * entryMultiplier;
-  const modifiedExitPercent = parseFloat(bestCombo.testStrategy.exitPercent) * exitMultiplier;
+  // Новая формула:
+  // новый ур вх = ур входа + (ур вых - ур входа) * множ входа
+  // новый ур вых = ур вых - (ур вых - ур входа) * множ выхода
+  const originalEntry = parseFloat(bestCombo.testStrategy.entryPercent);
+  const originalExit = parseFloat(bestCombo.testStrategy.exitPercent);
+  const range = originalExit - originalEntry;
+  
+  const modifiedEntryPercent = parseFloat((originalEntry + range * entryMultiplier).toFixed(2));
+  const modifiedExitPercent = parseFloat((originalExit - range * exitMultiplier).toFixed(2));
 
   console.log(`\n🔄 ПРИМЕНЯЕМ МНОЖИТЕЛИ:`);
-  console.log(`   Вход: ${bestCombo.testStrategy.entryPercent}% × ${entryMultiplier} = ${modifiedEntryPercent.toFixed(1)}%`);
-  console.log(`   Выход: ${bestCombo.testStrategy.exitPercent}% × ${exitMultiplier} = ${modifiedExitPercent.toFixed(1)}%`);
+  console.log(`   Оригинал: вход ${originalEntry}%, выход ${originalExit}%, диапазон ${range.toFixed(2)}%`);
+  console.log(`   Новый вход: ${originalEntry}% + ${range.toFixed(2)}% × ${entryMultiplier} = ${modifiedEntryPercent.toFixed(2)}%`);
+  console.log(`   Новый выход: ${originalExit}% - ${range.toFixed(2)}% × ${exitMultiplier} = ${modifiedExitPercent.toFixed(2)}%`);
 
   const researchResult = simulateTrading(researchDataForCalc, researchCurvePoints, modifiedEntryPercent, modifiedExitPercent);
   const researchTradesPercent = (researchResult.cleanTrades / researchDataForCalc.length) * 100;
@@ -492,8 +530,8 @@ export function calculateExponentialSupportLineWithTest(data, testPeriodDays, po
     testStrategy: bestCombo.testStrategy,
     researchStrategy: {
       avgPercentPerDay: researchResult.avgPercentPerDay.toFixed(4),
-      entryPercent: modifiedEntryPercent.toFixed(1),
-      exitPercent: modifiedExitPercent.toFixed(1),
+      entryPercent: modifiedEntryPercent.toFixed(2),
+      exitPercent: modifiedExitPercent.toFixed(2),
       totalTrades: researchResult.cleanTrades,
       totalDays: researchDataForCalc.length,
       hasFactClose: researchResult.hasFactClose,

@@ -37,12 +37,13 @@ export default function Level1Page() {
   const [batchTestPeriodDays, setBatchTestPeriodDays] = useState(initialState?.batchTestPeriodDays || '');
   
   // 🆕 МНОЖИТЕЛИ
-  const [entryMultiplier, setEntryMultiplier] = useState(initialState?.entryMultiplier || '1.0');
-  const [exitMultiplier, setExitMultiplier] = useState(initialState?.exitMultiplier || '1.0');
-  const [batchEntryMultiplier, setBatchEntryMultiplier] = useState(initialState?.batchEntryMultiplier || '1.0');
-  const [batchExitMultiplier, setBatchExitMultiplier] = useState(initialState?.batchExitMultiplier || '1.0');
+  const [entryMultiplier, setEntryMultiplier] = useState(initialState?.entryMultiplier || '0');
+  const [exitMultiplier, setExitMultiplier] = useState(initialState?.exitMultiplier || '0');
+  const [batchEntryMultiplier, setBatchEntryMultiplier] = useState(initialState?.batchEntryMultiplier || '0');
+  const [batchExitMultiplier, setBatchExitMultiplier] = useState(initialState?.batchExitMultiplier || '0');
   
-  const [mode, setMode] = useState(initialState?.mode || 'single');
+  // 🔥 MODE - всегда 'single' для SSR, восстанавливаем на клиенте
+  const [mode, setMode] = useState('single');
   
   const [chartData, setChartData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -51,6 +52,13 @@ export default function Level1Page() {
   // Массовый режим
   const [selectedFile, setSelectedFile] = useState(null);
   const [batchProcessing, setBatchProcessing] = useState(false);
+
+  // 🔥 ВОССТАНОВЛЕНИЕ MODE только на клиенте (после hydration)
+  useEffect(() => {
+    if (initialState?.mode) {
+      setMode(initialState.mode);
+    }
+  }, []); // выполнится один раз на клиенте
 
   // ========================================
   // 🔥 СОХРАНЕНИЕ: только при изменении значений
@@ -305,46 +313,44 @@ export default function Level1Page() {
               <div className="border-t border-white/20 pt-3 mt-3">
                 <p className="text-white text-xs font-semibold mb-3">🔢 Множители уровней</p>
                 <p className="text-white/70 text-xs mb-3">
-                  {testPeriodDays 
-                    ? 'Уровни теста × множители = уровни исследования'
-                    : 'Оптимальные уровни × множители = финальные уровни'}
+                  Коэффициенты сдвига уровней от диапазона (вход-выход)
                 </p>
                 
                 <div className="relative mb-3">
                   <label className="block text-white text-xs font-medium mb-1">
-                    Множитель для входа
+                    Множитель для входа (0-10)
                   </label>
                   <input
                     type="number"
-                    min="0.1"
+                    min="0"
                     max="10"
                     step="0.1"
-                    placeholder="1.0 (без изменений)"
+                    placeholder="0 (без сдвига)"
                     value={entryMultiplier}
                     onChange={(e) => setEntryMultiplier(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg bg-gray-200 text-gray-800 placeholder-gray-500 text-xs focus:outline-none focus:ring-2 focus:ring-purple-400"
                   />
                   <p className="text-white/60 text-xs mt-1">
-                    Например: 2.0 = удвоить расстояние до входа
+                    Формула: вход + (выход - вход) × множитель
                   </p>
                 </div>
 
                 <div className="relative">
                   <label className="block text-white text-xs font-medium mb-1">
-                    Множитель для выхода
+                    Множитель для выхода (0-10)
                   </label>
                   <input
                     type="number"
-                    min="0.1"
+                    min="0"
                     max="10"
                     step="0.1"
-                    placeholder="1.0 (без изменений)"
+                    placeholder="0 (без сдвига)"
                     value={exitMultiplier}
                     onChange={(e) => setExitMultiplier(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg bg-gray-200 text-gray-800 placeholder-gray-500 text-xs focus:outline-none focus:ring-2 focus:ring-purple-400"
                   />
                   <p className="text-white/60 text-xs mt-1">
-                    Например: 1.5 = увеличить расстояние до выхода в 1.5 раза
+                    Формула: выход - (выход - вход) × множитель
                   </p>
                 </div>
               </div>
@@ -468,10 +474,10 @@ export default function Level1Page() {
                 
                 <input
                   type="number"
-                  min="0.1"
+                  min="0"
                   max="10"
                   step="0.1"
-                  placeholder="Множитель входа (1.0)"
+                  placeholder="Множитель входа (0)"
                   value={batchEntryMultiplier}
                   onChange={(e) => setBatchEntryMultiplier(e.target.value)}
                   className="w-full px-3 py-2 mb-2 rounded-lg bg-gray-200 text-gray-800 placeholder-gray-600 text-xs focus:outline-none focus:ring-2 focus:ring-purple-400"
@@ -479,19 +485,17 @@ export default function Level1Page() {
 
                 <input
                   type="number"
-                  min="0.1"
+                  min="0"
                   max="10"
                   step="0.1"
-                  placeholder="Множитель выхода (1.0)"
+                  placeholder="Множитель выхода (0)"
                   value={batchExitMultiplier}
                   onChange={(e) => setBatchExitMultiplier(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-gray-200 text-gray-800 placeholder-gray-600 text-xs focus:outline-none focus:ring-2 focus:ring-purple-400"
                 />
                 
                 <p className="text-white/70 text-xs mt-2">
-                  💡 {batchTestPeriodDays 
-                    ? 'Уровни теста × множители = уровни исследования'
-                    : 'Оптимальные уровни × множители = финальные уровни'}
+                  💡 Сдвиг от диапазона: 0=без изменений, 1=весь диапазон, 2=удвоение
                 </p>
               </div>
               )
@@ -616,7 +620,7 @@ export default function Level1Page() {
                       {batchTestPeriodDays && (
                         <>
                           <li className="text-purple-900 font-semibold">• Тест и Исследование</li>
-                          {(batchEntryMultiplier !== '1.0' || batchExitMultiplier !== '1.0') && (
+                          {(batchEntryMultiplier !== '0' || batchExitMultiplier !== '0') && (
                             <li className="text-blue-600 font-semibold">
                               • Множители: вход ×{batchEntryMultiplier}, выход ×{batchExitMultiplier}
                             </li>
@@ -654,7 +658,7 @@ export default function Level1Page() {
                       </div>
                     )}
                     {/* 🆕 ПОКАЗЫВАЕМ МНОЖИТЕЛИ */}
-                    {testPeriodDays && (entryMultiplier !== '1.0' || exitMultiplier !== '1.0') && (
+                    {testPeriodDays && (entryMultiplier !== '0' || exitMultiplier !== '0') && (
                       <div className="text-xs text-blue-600 mt-1">
                         Множители: вход ×{entryMultiplier}, выход ×{exitMultiplier}
                       </div>
@@ -668,8 +672,8 @@ export default function Level1Page() {
                   point1MaxDay={point1MaxDay ? parseInt(point1MaxDay) : null}
                   point2MinDay={point2MinDay ? parseInt(point2MinDay) : null}
                   minTradesPercent={minTradesPercent ? parseFloat(minTradesPercent) : 0}
-                  entryMultiplier={entryMultiplier ? parseFloat(entryMultiplier) : 1.0}
-                  exitMultiplier={exitMultiplier ? parseFloat(exitMultiplier) : 1.0}
+                  entryMultiplier={entryMultiplier ? parseFloat(entryMultiplier) : 0}
+                  exitMultiplier={exitMultiplier ? parseFloat(exitMultiplier) : 0}
                 />
               </>
             )}
