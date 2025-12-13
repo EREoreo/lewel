@@ -1,4 +1,4 @@
-// LEVEL 2 ANALYSIS - ВЕРСИЯ С МНОЖИТЕЛЯМИ
+// LEVEL 2 ANALYSIS - ВЕРСИЯ С МНОЖИТЕЛЯМИ И ПОЛНЫМИ МЕТРИКАМИ
 // Линия экспоненциального сопротивления (падающая) для SHORT
 
 // ========================================
@@ -262,29 +262,26 @@ export function calculateExponentialResistanceLine(data, point1MaxDay = null, po
   }
   
   // 🆕 ПРИМЕНЯЕМ МНОЖИТЕЛИ К СТРАТЕГИИ
-  // Новая формула:
-  // новый ур вх = ур входа + (ур вых - ур входа) * множ входа
-  // новый ур вых = ур вых - (ур вых - ур входа) * множ выхода
   let finalStrategy = tradingStrategy;
   if (tradingStrategy && (entryMultiplier !== 0 || exitMultiplier !== 0)) {
-    const originalEntry = tradingStrategy.entryPercent;
-    const originalExit = tradingStrategy.exitPercent;
+    const originalEntry = parseFloat(tradingStrategy.entryPercent);
+    const originalExit = parseFloat(tradingStrategy.exitPercent);
     const range = originalExit - originalEntry;
     
     const newEntry = parseFloat((originalEntry + range * entryMultiplier).toFixed(2));
     const newExit = parseFloat((originalExit - range * exitMultiplier).toFixed(2));
     
-    // Пересчитываем стратегию с новыми уровнями
     const simulation = simulateTrading(data, curvePoints, newEntry, newExit);
+    const tradesPercent = (simulation.cleanTrades / data.length) * 100;
     
     finalStrategy = {
       entryPercent: parseFloat(newEntry.toFixed(2)),
       exitPercent: parseFloat(newExit.toFixed(2)),
       avgPercentPerDay: parseFloat(simulation.avgPercentPerDay.toFixed(2)),
-      totalTrades: simulation.totalTrades,
-      totalDays: simulation.totalDays,
+      totalTrades: simulation.cleanTrades,
+      totalDays: data.length,
       hasFactClose: simulation.hasFactClose,
-      tradesPercent: parseFloat(simulation.tradesPercent.toFixed(2)),
+      tradesPercent: parseFloat(tradesPercent.toFixed(2)),
       totalProfit: parseFloat(simulation.totalProfit.toFixed(2))
     };
   }
@@ -298,8 +295,8 @@ export function calculateExponentialResistanceLine(data, point1MaxDay = null, po
     startPrice: curvePoints[0].price,
     endPrice: curvePoints[curvePoints.length - 1].price,
     tradingStrategy: finalStrategy,
-    entryMultiplier: entryMultiplier,  // 🆕 сохраняем множители
-    exitMultiplier: exitMultiplier     // 🆕
+    entryMultiplier: entryMultiplier,
+    exitMultiplier: exitMultiplier
   };
 }
 
@@ -392,7 +389,6 @@ export function calculateExponentialResistanceLineWithTest(data, testPeriodDays,
         const exitPrice = minResistancePrice * (1 - exitPercent / 100);
         if (exitPrice < localMin) break;
 
-        // ТЕСТ
         const testResult = simulateTrading(testData, combo.testCurvePoints, entryPercent, exitPercent, false);
         const testTradesPercent = (testResult.cleanTrades / testData.length) * 100;
         
@@ -456,7 +452,6 @@ export function calculateExponentialResistanceLineWithTest(data, testPeriodDays,
   
   if (researchDataForCalc.length === 0) {
     console.log('⚠️ Исследуемый период пуст из-за пересечения');
-    // Возвращаем только тестовые данные
     return {
       points: [
         { index: bestCombo.point1Index, price: bestCombo.point1Price, date: testData[bestCombo.point1Index].date },
@@ -482,9 +477,6 @@ export function calculateExponentialResistanceLineWithTest(data, testPeriodDays,
   }));
 
   // ПРИМЕНЯЕМ МНОЖИТЕЛИ
-  // Новая формула:
-  // новый ур вх = ур входа + (ур вых - ур входа) * множ входа
-  // новый ур вых = ур вых - (ур вых - ур входа) * множ выхода
   const originalEntry = parseFloat(bestCombo.testStrategy.entryPercent);
   const originalExit = parseFloat(bestCombo.testStrategy.exitPercent);
   const range = originalExit - originalEntry;
@@ -497,13 +489,17 @@ export function calculateExponentialResistanceLineWithTest(data, testPeriodDays,
   console.log(`   Новый вход: ${originalEntry}% + ${range.toFixed(2)}% × ${entryMultiplier} = ${modifiedEntryPercent.toFixed(2)}%`);
   console.log(`   Новый выход: ${originalExit}% - ${range.toFixed(2)}% × ${exitMultiplier} = ${modifiedExitPercent.toFixed(2)}%`);
 
+  // 🔥 ЗАПУСКАЕМ СИМУЛЯЦИЮ С НОВЫМИ ПРОЦЕНТАМИ
   const researchResult = simulateTrading(researchDataForCalc, researchCurvePoints, modifiedEntryPercent, modifiedExitPercent, false);
   const researchTradesPercent = (researchResult.cleanTrades / researchDataForCalc.length) * 100;
 
   console.log(`\n📊 РЕЗУЛЬТАТ НА ИССЛЕДУЕМОМ ПЕРИОДЕ:`);
   console.log(`   Средний %: ${researchResult.avgPercentPerDay.toFixed(4)}%`);
   console.log(`   Трейды: ${researchResult.cleanTrades}`);
+  console.log(`   Всего дней: ${researchDataForCalc.length}`);
   console.log(`   % сделок: ${researchTradesPercent.toFixed(2)}%`);
+  console.log(`   Общая прибыль: ${researchResult.totalProfit.toFixed(2)}%`);
+  console.log(`   Закрыто по факту: ${researchResult.hasFactClose}`);
 
   return {
     points: [
@@ -518,15 +514,16 @@ export function calculateExponentialResistanceLineWithTest(data, testPeriodDays,
     endPrice: fullCurvePoints[fullCurvePoints.length - 1].price,
     testPeriodDays: testPeriodDays,
     testStrategy: bestCombo.testStrategy,
+    // 🔥 ВСЕ МЕТРИКИ ДЛЯ ИССЛЕДУЕМОГО УЧАСТКА
     researchStrategy: {
-      avgPercentPerDay: researchResult.avgPercentPerDay.toFixed(4),
-      entryPercent: modifiedEntryPercent.toFixed(1),
-      exitPercent: modifiedExitPercent.toFixed(1),
-      totalTrades: researchResult.cleanTrades,
-      totalDays: researchDataForCalc.length,
-      hasFactClose: researchResult.hasFactClose,
-      tradesPercent: researchTradesPercent.toFixed(2),
-      totalProfit: researchResult.totalProfit.toFixed(2)
+      avgPercentPerDay: parseFloat(researchResult.avgPercentPerDay.toFixed(4)),
+      entryPercent: parseFloat(modifiedEntryPercent.toFixed(2)),
+      exitPercent: parseFloat(modifiedExitPercent.toFixed(2)),
+      totalTrades: researchResult.cleanTrades,           // 🔥 ТРЕЙДЫ
+      totalDays: researchDataForCalc.length,             // 🔥 ВСЕГО ДНЕЙ
+      hasFactClose: researchResult.hasFactClose,         // 🔥 ЗАКРЫТО ПО ФАКТУ
+      tradesPercent: parseFloat(researchTradesPercent.toFixed(2)),
+      totalProfit: parseFloat(researchResult.totalProfit.toFixed(2))  // 🔥 ОБЩАЯ ПРИБЫЛЬ
     },
     researchEndIndex: researchEndIndex,
     hasCrossing: hasCrossing,
