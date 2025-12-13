@@ -476,7 +476,7 @@ export default function Level2Page() {
                   type="number"
                   min="0"
                   max="10"
-                  step="0.1"
+                  step="0.01"
                   placeholder="Множитель входа (0)"
                   value={batchEntryMultiplier}
                   onChange={(e) => setBatchEntryMultiplier(e.target.value)}
@@ -487,7 +487,7 @@ export default function Level2Page() {
                   type="number"
                   min="0"
                   max="10"
-                  step="0.1"
+                  step="0.01"
                   placeholder="Множитель выхода (0)"
                   value={batchExitMultiplier}
                   onChange={(e) => setBatchExitMultiplier(e.target.value)}

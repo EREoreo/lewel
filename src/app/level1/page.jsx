@@ -324,7 +324,7 @@ export default function Level1Page() {
                     type="number"
                     min="0"
                     max="10"
-                    step="0.1"
+                    step="0.01"
                     placeholder="0 (без сдвига)"
                     value={entryMultiplier}
                     onChange={(e) => setEntryMultiplier(e.target.value)}
@@ -343,7 +343,7 @@ export default function Level1Page() {
                     type="number"
                     min="0"
                     max="10"
-                    step="0.1"
+                    step="0.01"
                     placeholder="0 (без сдвига)"
                     value={exitMultiplier}
                     onChange={(e) => setExitMultiplier(e.target.value)}
@@ -476,7 +476,7 @@ export default function Level1Page() {
                   type="number"
                   min="0"
                   max="10"
-                  step="0.1"
+                  step="0.01"
                   placeholder="Множитель входа (0)"
                   value={batchEntryMultiplier}
                   onChange={(e) => setBatchEntryMultiplier(e.target.value)}
@@ -487,7 +487,7 @@ export default function Level1Page() {
                   type="number"
                   min="0"
                   max="10"
-                  step="0.1"
+                  step="0.01"
                   placeholder="Множитель выхода (0)"
                   value={batchExitMultiplier}
                   onChange={(e) => setBatchExitMultiplier(e.target.value)}
@@ -526,7 +526,7 @@ export default function Level1Page() {
                   type="number"
                   min="0"
                   max="100"
-                  step="0.1"
+                  step="0.01"
                   placeholder="Мин. процент сделок (%)"
                   value={minTradesPercent}
                   onChange={(e) => setMinTradesPercent(e.target.value)}

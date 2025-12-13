@@ -1,4 +1,4 @@
-// LEVEL 2 ANALYSIS - ВЕРСИЯ С МНОЖИТЕЛЯМИ И ПОЛНЫМИ МЕТРИКАМИ
+// LEVEL 2 ANALYSIS - ИСПРАВЛЕННАЯ ВЕРСИЯ С ПРАВИЛЬНОЙ ЛОГИКОЙ ПЕРЕСЕЧЕНИЯ
 // Линия экспоненциального сопротивления (падающая) для SHORT
 
 // ========================================
@@ -61,6 +61,17 @@ function simulateTrading(data, curvePoints, entryPercent, exitPercent, verbose =
         savedEntryPrice = 0;
       }
     } else if (state === 1) {
+      // 🔥 НОВАЯ ЛОГИКА: Если вошли в последний день
+      if (i === tradeEntryDay && isLastDay) {
+        // Выходим по цене закрытия В ЭТОТ ЖЕ ДЕНЬ
+        const profit = (savedEntryPrice / candle.close - 1) * 100;
+        totalProfit += profit;
+        hasFactClose = 1;
+        state = 0;
+        savedEntryPrice = 0;
+        continue;
+      }
+      
       if (canExit) {
         const profit = (prevSavedEntryPrice / exitPriceTarget - 1) * 100;
         totalProfit += profit;
@@ -261,7 +272,6 @@ export function calculateExponentialResistanceLine(data, point1MaxDay = null, po
     return null;
   }
   
-  // 🆕 ПРИМЕНЯЕМ МНОЖИТЕЛИ К СТРАТЕГИИ
   let finalStrategy = tradingStrategy;
   if (tradingStrategy && (entryMultiplier !== 0 || exitMultiplier !== 0)) {
     const originalEntry = parseFloat(tradingStrategy.entryPercent);
@@ -301,7 +311,7 @@ export function calculateExponentialResistanceLine(data, point1MaxDay = null, po
 }
 
 // ========================================
-// 🆕 ФУНКЦИЯ С ТЕСТОВЫМ ПЕРИОДОМ И МНОЖИТЕЛЯМИ
+// 🔥 ФУНКЦИЯ С ТЕСТОВЫМ ПЕРИОДОМ (ИСПРАВЛЕННАЯ ЛОГИКА ПЕРЕСЕЧЕНИЯ)
 // ========================================
 export function calculateExponentialResistanceLineWithTest(data, testPeriodDays, point1MaxDay = null, point2MinDay = null, minTradesPercent = 0, entryMultiplier = 0, exitMultiplier = 0) {
   if (!data || data.length < 2) return null;
@@ -318,7 +328,6 @@ export function calculateExponentialResistanceLineWithTest(data, testPeriodDays,
 
   const testData = data.slice(0, testPeriodDays);
 
-  // 1. НАХОДИМ ВСЕ ВОЗМОЖНЫЕ КОМБИНАЦИИ ТОЧЕК
   const allCombinations = [];
   
   for (let i = 0; i < testData.length; i++) {
@@ -372,7 +381,6 @@ export function calculateExponentialResistanceLineWithTest(data, testPeriodDays,
     return null;
   }
 
-  // 2. ИЩЕМ ЛУЧШУЮ КОМБИНАЦИЮ НА ТЕСТЕ
   let bestCombo = null;
   let maxTestAvg = -Infinity;
 
@@ -430,28 +438,33 @@ export function calculateExponentialResistanceLineWithTest(data, testPeriodDays,
   console.log(`   Точки: день ${bestCombo.point1Index + 1} → день ${bestCombo.point2Index + 1}`);
   console.log(`   Вход: ${bestCombo.testStrategy.entryPercent}%, Выход: ${bestCombo.testStrategy.exitPercent}%`);
 
-  // 3. ПРИМЕНЯЕМ МНОЖИТЕЛИ И ТЕСТИРУЕМ НА ИССЛЕДУЕМОМ ПЕРИОДЕ
   const fullCurvePoints = [];
   for (let k = 0; k < data.length; k++) {
     const price = bestCombo.point1Price * Math.pow(bestCombo.percentPerDay, k - bestCombo.point1Index);
     fullCurvePoints.push({ index: k, price });
   }
 
-  // Проверяем пересечение на исследуемом периоде
+  // 🔥 НОВАЯ ЛОГИКА ПЕРЕСЕЧЕНИЯ
   let researchEndIndex = data.length - 1;
   let hasCrossing = false;
+  
   for (let k = testPeriodDays; k < data.length; k++) {
     if (data[k].high > fullCurvePoints[k].price + 0.001) {
-      researchEndIndex = k - 1;
+      // 🔥 ВКЛЮЧАЕМ ДЕНЬ С ПЕРЕСЕЧЕНИЕМ!
+      researchEndIndex = k;
       hasCrossing = true;
+      console.log(`⚠️ Пересечение на дне ${k + 1} - ИСПОЛЬЗУЕМ ЭТОТ ДЕНЬ ДЛЯ ВЫХОДА`);
       break;
     }
   }
 
+  // 🔥 БЕРЕМ ДАННЫЕ ВКЛЮЧАЯ ДЕНЬ ПЕРЕСЕЧЕНИЯ
   const researchDataForCalc = data.slice(testPeriodDays, researchEndIndex + 1);
   
+  console.log(`\n📊 Исследуемый период: дни ${testPeriodDays + 1}-${researchEndIndex + 1} (${researchDataForCalc.length} дней)`);
+  
   if (researchDataForCalc.length === 0) {
-    console.log('⚠️ Исследуемый период пуст из-за пересечения');
+    console.log('⚠️ Исследуемый период пуст - пересечение сразу после теста');
     return {
       points: [
         { index: bestCombo.point1Index, price: bestCombo.point1Price, date: testData[bestCombo.point1Index].date },
@@ -476,7 +489,6 @@ export function calculateExponentialResistanceLineWithTest(data, testPeriodDays,
     price: p.price
   }));
 
-  // ПРИМЕНЯЕМ МНОЖИТЕЛИ
   const originalEntry = parseFloat(bestCombo.testStrategy.entryPercent);
   const originalExit = parseFloat(bestCombo.testStrategy.exitPercent);
   const range = originalExit - originalEntry;
@@ -489,13 +501,13 @@ export function calculateExponentialResistanceLineWithTest(data, testPeriodDays,
   console.log(`   Новый вход: ${originalEntry}% + ${range.toFixed(2)}% × ${entryMultiplier} = ${modifiedEntryPercent.toFixed(2)}%`);
   console.log(`   Новый выход: ${originalExit}% - ${range.toFixed(2)}% × ${exitMultiplier} = ${modifiedExitPercent.toFixed(2)}%`);
 
-  // 🔥 ЗАПУСКАЕМ СИМУЛЯЦИЮ С НОВЫМИ ПРОЦЕНТАМИ
+  // 🔥 СИМУЛЯЦИЯ С НОВОЙ ЛОГИКОЙ
   const researchResult = simulateTrading(researchDataForCalc, researchCurvePoints, modifiedEntryPercent, modifiedExitPercent, false);
   const researchTradesPercent = (researchResult.cleanTrades / researchDataForCalc.length) * 100;
 
   console.log(`\n📊 РЕЗУЛЬТАТ НА ИССЛЕДУЕМОМ ПЕРИОДЕ:`);
   console.log(`   Средний %: ${researchResult.avgPercentPerDay.toFixed(4)}%`);
-  console.log(`   Трейды: ${researchResult.cleanTrades}`);
+  console.log(`   Трейды (чистые): ${researchResult.cleanTrades}`);
   console.log(`   Всего дней: ${researchDataForCalc.length}`);
   console.log(`   % сделок: ${researchTradesPercent.toFixed(2)}%`);
   console.log(`   Общая прибыль: ${researchResult.totalProfit.toFixed(2)}%`);
@@ -514,16 +526,15 @@ export function calculateExponentialResistanceLineWithTest(data, testPeriodDays,
     endPrice: fullCurvePoints[fullCurvePoints.length - 1].price,
     testPeriodDays: testPeriodDays,
     testStrategy: bestCombo.testStrategy,
-    // 🔥 ВСЕ МЕТРИКИ ДЛЯ ИССЛЕДУЕМОГО УЧАСТКА
     researchStrategy: {
       avgPercentPerDay: parseFloat(researchResult.avgPercentPerDay.toFixed(4)),
       entryPercent: parseFloat(modifiedEntryPercent.toFixed(2)),
       exitPercent: parseFloat(modifiedExitPercent.toFixed(2)),
-      totalTrades: researchResult.cleanTrades,           // 🔥 ТРЕЙДЫ
-      totalDays: researchDataForCalc.length,             // 🔥 ВСЕГО ДНЕЙ
-      hasFactClose: researchResult.hasFactClose,         // 🔥 ЗАКРЫТО ПО ФАКТУ
+      totalTrades: researchResult.cleanTrades,
+      totalDays: researchDataForCalc.length,
+      hasFactClose: researchResult.hasFactClose,
       tradesPercent: parseFloat(researchTradesPercent.toFixed(2)),
-      totalProfit: parseFloat(researchResult.totalProfit.toFixed(2))  // 🔥 ОБЩАЯ ПРИБЫЛЬ
+      totalProfit: parseFloat(researchResult.totalProfit.toFixed(2))
     },
     researchEndIndex: researchEndIndex,
     hasCrossing: hasCrossing,
