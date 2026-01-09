@@ -8,14 +8,13 @@ import { fetchStockData } from '../lib/yahooFinance';
 export default function Level2Page() {
   const router = useRouter();
   
-  // 🔥 ЗАГРУЖАЕМ из localStorage СРАЗУ в начальное состояние
   const getInitialState = () => {
     if (typeof window === 'undefined') return '';
     try {
       const saved = localStorage.getItem('level2_state');
       if (saved) {
         const state = JSON.parse(saved);
-        console.log('📥 Начальная загрузка Level 2:', state);
+        console.log('📥 Начальная загрузка Level 1:', state);
         return state;
       }
     } catch (error) {
@@ -26,7 +25,6 @@ export default function Level2Page() {
 
   const initialState = getInitialState();
   
-  // СОСТОЯНИЕ с начальными значениями из localStorage
   const [ticker, setTicker] = useState(initialState?.ticker || '');
   const [startDate, setStartDate] = useState(initialState?.startDate || '');
   const [endDate, setEndDate] = useState(initialState?.endDate || '');
@@ -36,33 +34,32 @@ export default function Level2Page() {
   const [minTradesPercent, setMinTradesPercent] = useState(initialState?.minTradesPercent || '');
   const [batchTestPeriodDays, setBatchTestPeriodDays] = useState(initialState?.batchTestPeriodDays || '');
   
-  // 🆕 МНОЖИТЕЛИ
   const [entryMultiplier, setEntryMultiplier] = useState(initialState?.entryMultiplier || '0');
   const [exitMultiplier, setExitMultiplier] = useState(initialState?.exitMultiplier || '0');
   const [batchEntryMultiplier, setBatchEntryMultiplier] = useState(initialState?.batchEntryMultiplier || '0');
   const [batchExitMultiplier, setBatchExitMultiplier] = useState(initialState?.batchExitMultiplier || '0');
   
-  // 🔥 MODE - всегда 'single' для SSR, восстанавливаем на клиенте
+  // 🆕 СТОП-ЛОСС
+  const [stopLossPercent, setStopLossPercent] = useState(initialState?.stopLossPercent || '3.5');
+  const [useStopLoss, setUseStopLoss] = useState(initialState?.useStopLoss || false);
+  const [batchStopLossPercent, setBatchStopLossPercent] = useState(initialState?.batchStopLossPercent || '3.5');
+  const [batchUseStopLoss, setBatchUseStopLoss] = useState(initialState?.batchUseStopLoss || false);
+  
   const [mode, setMode] = useState('single');
   
   const [chartData, setChartData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
-  // Массовый режим
   const [selectedFile, setSelectedFile] = useState(null);
   const [batchProcessing, setBatchProcessing] = useState(false);
 
-  // 🔥 ВОССТАНОВЛЕНИЕ MODE только на клиенте (после hydration)
   useEffect(() => {
     if (initialState?.mode) {
       setMode(initialState.mode);
     }
-  }, []); // выполнится один раз на клиенте
+  }, []);
 
-  // ========================================
-  // 🔥 СОХРАНЕНИЕ: только при изменении значений
-  // ========================================
   useEffect(() => {
     const state = {
       ticker,
@@ -73,20 +70,26 @@ export default function Level2Page() {
       point2MinDay,
       minTradesPercent,
       batchTestPeriodDays,
-      entryMultiplier,        // 🆕
-      exitMultiplier,         // 🆕
-      batchEntryMultiplier,   // 🆕
-      batchExitMultiplier,    // 🆕
+      entryMultiplier,
+      exitMultiplier,
+      batchEntryMultiplier,
+      batchExitMultiplier,
+      stopLossPercent,
+      useStopLoss,
+      batchStopLossPercent,
+      batchUseStopLoss,
       mode
     };
     
     try {
       localStorage.setItem('level2_state', JSON.stringify(state));
-      console.log('💾 Level 2 сохранено:', state);
+      console.log('💾 Level 1 сохранено:', state);
     } catch (error) {
       console.error('❌ Ошибка сохранения:', error);
     }
-  }, [ticker, startDate, endDate, testPeriodDays, point1MaxDay, point2MinDay, minTradesPercent, batchTestPeriodDays, entryMultiplier, exitMultiplier, batchEntryMultiplier, batchExitMultiplier, mode]);
+  }, [ticker, startDate, endDate, testPeriodDays, point1MaxDay, point2MinDay, minTradesPercent, 
+      batchTestPeriodDays, entryMultiplier, exitMultiplier, batchEntryMultiplier, batchExitMultiplier,
+      stopLossPercent, useStopLoss, batchStopLossPercent, batchUseStopLoss, mode]);
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
@@ -120,12 +123,17 @@ export default function Level2Page() {
         formData.append('testPeriodDays', batchTestPeriodDays);
       }
       
-      // 🆕 МНОЖИТЕЛИ - передаём ВСЕГДА
       if (batchEntryMultiplier) {
         formData.append('entryMultiplier', batchEntryMultiplier);
       }
       if (batchExitMultiplier) {
         formData.append('exitMultiplier', batchExitMultiplier);
+      }
+      
+      // 🆕 СТОП-ЛОСС
+      if (batchUseStopLoss) {
+        formData.append('useStopLoss', 'true');
+        formData.append('manualStopPercent', batchStopLossPercent);
       }
 
       const response = await fetch('/api/batch', {
@@ -198,7 +206,6 @@ export default function Level2Page() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      {/* Навигационная шапка */}
       <div className="bg-white shadow-md border-b border-gray-200">
         <div className="flex gap-4 p-4">
           <button 
@@ -214,17 +221,16 @@ export default function Level2Page() {
             Level Down
           </button>
           <button 
-            onClick={() => router.push('/level1')}
-            className="px-8 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full font-medium transition-colors"
+            className="px-8 py-3 bg-orange-500 text-white rounded-full font-medium shadow-lg"
           >
             Level 1
           </button>
           <button 
-            className="px-8 py-3 bg-orange-500 text-white rounded-full font-medium shadow-lg"
+            onClick={() => router.push('/level2')}
+            className="px-8 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full font-medium transition-colors"
           >
             Level 2
           </button>
-
           <button
             onClick={() => router.push('/history')}
             className="px-8 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full font-medium transition-colors"
@@ -242,10 +248,9 @@ export default function Level2Page() {
 
       <div className="flex">
         <div className="w-80 bg-[#9A7A7A] min-h-screen p-6 overflow-y-auto">
-          <h2 className="text-white text-xl font-semibold mb-4">Level 2 Analysis</h2>
-          <p className="text-white/80 text-sm mb-6">Экспоненциальная линия сопротивления</p>
+          <h2 className="text-white text-xl font-semibold mb-4">Level 1 Analysis</h2>
+          <p className="text-white/80 text-sm mb-6">Экспоненциальная линия поддержки</p>
           
-          {/* Переключатель режимов */}
           <div className="flex gap-2 mb-6">
             <button
               onClick={() => setMode('single')}
@@ -270,7 +275,6 @@ export default function Level2Page() {
           </div>
 
           {mode === 'single' ? (
-            /* Форма для одного тикера */
             <form onSubmit={handleSubmit} className="space-y-3">
               <input
                 type="text"
@@ -309,30 +313,23 @@ export default function Level2Page() {
                 />
               </div>
 
-              {/* 🆕 МНОЖИТЕЛИ - показываем ВСЕГДА */}
               <div className="border-t border-white/20 pt-3 mt-3">
                 <p className="text-white text-xs font-semibold mb-3">🔢 Множители уровней</p>
-                <p className="text-white/70 text-xs mb-3">
-                  Коэффициенты сдвига уровней от диапазона (вход-выход)
-                </p>
                 
                 <div className="relative mb-3">
                   <label className="block text-white text-xs font-medium mb-1">
-                    Множитель для входа SHORT (0-10)
+                    Множитель для входа (0-10)
                   </label>
                   <input
                     type="number"
                     min="0"
                     max="10"
-                    step="0.1"
+                    step="0.01"
                     placeholder="0 (без сдвига)"
                     value={entryMultiplier}
                     onChange={(e) => setEntryMultiplier(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg bg-gray-200 text-gray-800 placeholder-gray-500 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
                   />
-                  <p className="text-white/60 text-xs mt-1">
-                    Формула: вход + (выход - вход) × множитель
-                  </p>
                 </div>
 
                 <div className="relative">
@@ -343,19 +340,55 @@ export default function Level2Page() {
                     type="number"
                     min="0"
                     max="10"
-                    step="0.1"
+                    step="0.01"
                     placeholder="0 (без сдвига)"
                     value={exitMultiplier}
                     onChange={(e) => setExitMultiplier(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg bg-gray-200 text-gray-800 placeholder-gray-500 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
                   />
-                  <p className="text-white/60 text-xs mt-1">
-                    Формула: выход - (выход - вход) × множитель
-                  </p>
                 </div>
               </div>
 
-              {/* ФИЛЬТРЫ ТОЧЕК */}
+              {/* 🆕 СТОП-ЛОСС */}
+              <div className="border-t border-white/20 pt-3 mt-3">
+                <label className="flex items-center text-white text-sm mb-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={useStopLoss}
+                    onChange={(e) => setUseStopLoss(e.target.checked)}
+                    className="mr-2 w-4 h-4 cursor-pointer"
+                  />
+                  <span className="font-medium">🛑 Использовать стоп-лосс</span>
+                </label>
+                
+                {useStopLoss && (
+                  <div className="ml-6 space-y-2">
+                    <label className="block text-white text-xs font-medium mb-1">
+                      Стоп-лосс (%)
+                    </label>
+                    <input
+                      type="number"
+                      min="0.1"
+                      max="20"
+                      step="0.1"
+                      value={stopLossPercent}
+                      onChange={(e) => setStopLossPercent(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-gray-200 text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                      placeholder="3.5"
+                    />
+                    <p className="text-white/60 text-xs">
+                      Стоп на {stopLossPercent}% выше линии сопротивления
+                    </p>
+                  </div>
+                )}
+                
+                {!useStopLoss && (
+                  <p className="text-white/70 text-xs ml-6">
+                    Без стопа: выход только по цели или в конце периода
+                  </p>
+                )}
+              </div>
+
               <div className="border-t border-white/20 pt-3 mt-3">
                 <p className="text-white text-xs font-semibold mb-3">🎯 Фильтры точек</p>
                 
@@ -418,7 +451,6 @@ export default function Level2Page() {
               </button>
             </form>
           ) : (
-            /* Форма для массовой обработки */
             <div className="space-y-3">
               <div>
                 <label className="block text-white text-sm font-medium mb-2">
@@ -451,7 +483,6 @@ export default function Level2Page() {
                 className="w-full px-4 py-2 rounded-lg bg-gray-200 text-gray-800 focus:outline-none focus:ring-2 focus:ring-orange-400"
               />
 
-              {/* ТЕСТОВЫЙ ПЕРИОД ДЛЯ МАССОВОЙ ОБРАБОТКИ */}
               <div className="border-t border-white/20 pt-3">
                 <p className="text-white text-xs font-semibold mb-3">📅 Разделение периода</p>
                 
@@ -463,12 +494,8 @@ export default function Level2Page() {
                   onChange={(e) => setBatchTestPeriodDays(e.target.value)}
                   className="w-full px-3 py-2 mb-2 rounded-lg bg-gray-200 text-gray-800 placeholder-gray-600 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
                 />
-                <p className="text-white/70 text-xs">
-                  💡 Например: 30 (первые 30 дней = тест)
-                </p>
               </div>
 
-              {/* 🆕 МНОЖИТЕЛИ ДЛЯ МАССОВОЙ - показываем ВСЕГДА */}
               <div className="border-t border-white/20 pt-3 mt-3">
                 <p className="text-white text-xs font-semibold mb-3">🔢 Множители уровней</p>
                 
@@ -493,12 +520,42 @@ export default function Level2Page() {
                   onChange={(e) => setBatchExitMultiplier(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-gray-200 text-gray-800 placeholder-gray-600 text-xs focus:outline-none focus:ring-2 focus:ring-orange-400"
                 />
-                
-                <p className="text-white/70 text-xs mt-2">
-                  💡 Сдвиг от диапазона: 0=без изменений, 1=весь диапазон, 2=удвоение
-                </p>
               </div>
-              {/* ФИЛЬТРЫ ДЛЯ МАССОВОЙ ОБРАБОТКИ */}
+
+              {/* 🆕 СТОП-ЛОСС ДЛЯ МАССОВОЙ */}
+              <div className="border-t border-white/20 pt-3 mt-3">
+                <label className="flex items-center text-white text-sm mb-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={batchUseStopLoss}
+                    onChange={(e) => setBatchUseStopLoss(e.target.checked)}
+                    className="mr-2 w-4 h-4 cursor-pointer"
+                  />
+                  <span className="font-medium">🛑 Использовать стоп-лосс</span>
+                </label>
+                
+                {batchUseStopLoss && (
+                  <div className="ml-6">
+                    <label className="block text-white text-xs font-medium mb-1">
+                      Стоп-лосс (%)
+                    </label>
+                    <input
+                      type="number"
+                      min="0.1"
+                      max="20"
+                      step="0.1"
+                      value={batchStopLossPercent}
+                      onChange={(e) => setBatchStopLossPercent(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-gray-200 text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                      placeholder="3.5"
+                    />
+                    <p className="text-white/60 text-xs mt-1">
+                      от уровня сопротивления
+                    </p>
+                  </div>
+                )}
+              </div>
+
               <div className="border-t border-white/20 pt-3">
                 <p className="text-white text-xs font-semibold mb-3">🎯 Фильтры (необязательно)</p>
                 
@@ -524,7 +581,7 @@ export default function Level2Page() {
                   type="number"
                   min="0"
                   max="100"
-                  step="0.1"
+                  step="0.01"
                   placeholder="Мин. процент сделок (%)"
                   value={minTradesPercent}
                   onChange={(e) => setMinTradesPercent(e.target.value)}
@@ -571,20 +628,9 @@ export default function Level2Page() {
           <div className="mt-6 p-3 bg-white/10 rounded-lg text-white/80 text-xs">
             <p className="font-semibold mb-2">🆕 Новые возможности:</p>
             <ul className="space-y-1 list-disc list-inside">
+              <li>Стоп-лосс: защита от больших убытков</li>
               <li>Тестовый период: разделение данных</li>
-              <li>Множители: настройка уровней входа/выхода</li>
-              <li>Точка 1 до дня: в начале</li>
-              <li>Точка 2 от конца: в последних N днях</li>
-              <li>Мин. % сделок: фильтр комбинаций</li>
-            </ul>
-          </div>
-
-          <div className="mt-4 p-3 bg-white/10 rounded-lg text-white/80 text-xs">
-            <p className="font-semibold mb-2">Особенности Level 2:</p>
-            <ul className="space-y-1 list-disc list-inside">
-              <li>Изогнутая (экспоненциальная) линия</li>
-              <li>Минимальный процент падения в день</li>
-              <li>Проходит выше всех свечей</li>
+              <li>Множители: настройка уровней</li>
             </ul>
           </div>
         </div>
@@ -604,29 +650,10 @@ export default function Level2Page() {
               <div className="flex items-center justify-center h-[500px]">
                 <div className="text-center max-w-md">
                   <div className="text-6xl mb-4">📈</div>
-                  <h3 className="text-2xl font-bold text-gray-800 mb-4">Массовая обработка Level 2</h3>
+                  <h3 className="text-2xl font-bold text-gray-800 mb-4">Массовая обработка Level 1</h3>
                   <p className="text-gray-600 mb-6">
                     Загрузите Excel файл с тикерами и получите экспоненциальные линии сопротивления.
                   </p>
-                  <div className="bg-orange-50 p-4 rounded-lg text-sm text-left">
-                    <p className="font-semibold text-orange-900 mb-2">Результат будет содержать:</p>
-                    <ul className="space-y-1 text-orange-700 text-xs">
-                      <li>• Тикер, Цены точек, Дни точек</li>
-                      <li>• Процент в день</li>
-                      <li>• Трейды, Всего дней, Закрыто по факту</li>
-                      <li>• Процент сделок</li>
-                      {batchTestPeriodDays && (
-                        <>
-                          <li className="text-orange-900 font-semibold">• Тест и Исследование</li>
-                          {(batchEntryMultiplier !== '0' || batchExitMultiplier !== '0') && (
-                            <li className="text-blue-600 font-semibold">
-                              • Множители: вход ×{batchEntryMultiplier}, выход ×{batchExitMultiplier}
-                            </li>
-                          )}
-                        </>
-                      )}
-                    </ul>
-                  </div>
                 </div>
               </div>
             )}
@@ -648,17 +675,9 @@ export default function Level2Page() {
                   </h3>
                   <div className="text-sm text-gray-600">
                     {startDate} - {endDate}
-                    {(point1MaxDay || point2MinDay || minTradesPercent) && (
-                      <div className="text-xs text-orange-600 mt-1">
-                        {point1MaxDay && `Точка1≤${point1MaxDay}`}
-                        {point2MinDay && ` Точка2≥${point2MinDay}`}
-                        {minTradesPercent && ` Мин%≥${minTradesPercent}`}
-                      </div>
-                    )}
-                    {/* 🆕 ПОКАЗЫВАЕМ МНОЖИТЕЛИ */}
-                    {testPeriodDays && (entryMultiplier !== '0' || exitMultiplier !== '0') && (
-                      <div className="text-xs text-blue-600 mt-1">
-                        Множители: вход ×{entryMultiplier}, выход ×{exitMultiplier}
+                    {useStopLoss && (
+                      <div className="text-xs text-red-600 mt-1">
+                        Стоп-лосс: {stopLossPercent}%
                       </div>
                     )}
                   </div>
@@ -672,6 +691,8 @@ export default function Level2Page() {
                   minTradesPercent={minTradesPercent ? parseFloat(minTradesPercent) : 0}
                   entryMultiplier={entryMultiplier ? parseFloat(entryMultiplier) : 0}
                   exitMultiplier={exitMultiplier ? parseFloat(exitMultiplier) : 0}
+                  useStopLoss={useStopLoss}
+                  manualStopPercent={useStopLoss ? parseFloat(stopLossPercent) : null}
                 />
               </>
             )}

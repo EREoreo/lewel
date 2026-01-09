@@ -1,5 +1,5 @@
-// LEVEL 1 ANALYSIS - ИСПРАВЛЕННАЯ ВЕРСИЯ С ПРАВИЛЬНОЙ ЛОГИКОЙ ПЕРЕСЕЧЕНИЯ
-// Линия экспоненциальной поддержки (растущая)
+// LEVEL 1 ANALYSIS - ВЕРСИЯ С НОВОЙ ЛОГИКОЙ ТОРГОВЛИ (СТОП-ЛОСС)
+// Линия экспоненциальной поддержки (растущая) для LONG
 
 // ========================================
 // ФУНКЦИЯ ОКРУГЛЕНИЯ ЦЕН (1-5 вниз, 6-9 вверх)
@@ -27,7 +27,148 @@ function roundPrices(data) {
 }
 
 // ========================================
-// СИМУЛЯЦИЯ ТОРГОВЛИ
+// 🆕 НОВАЯ СИМУЛЯЦИЯ ТОРГОВЛИ С СТОП-ЛОССОМ
+// ========================================
+function simulateTradingWithStop(data, curvePoints, entryPercent, exitPercent, stopPercent) {
+  const m = data.length;
+  let n = 0;
+  let t_c = 0;  // чистые трейды
+  let t_f = 0;  // трейды закрытые по факту
+  let E_percent = 0;  // сумма % по всем трейдам
+  let Pt1 = 0;  // цена входа
+  let inPosition = false;
+
+  while (n < m) {
+    const candle = data[n];
+    const Pl_n = curvePoints[n].price;
+    const P_enter_n = Pl_n * (entryPercent / 100 + 1);
+    const P_exit_n = Pl_n * (exitPercent / 100 + 1);
+    const P_stop_n = Pl_n * (1 - stopPercent / 100);
+
+    // ШАГ 1: Проверка пересечения линии поддержки
+    if (candle.open <= Pl_n) {
+      // Линия пробита - прекращаем торговлю
+      break;
+    }
+
+    if (!inPosition) {
+      // ШАГ 2: Проверка входа по open
+      if (candle.open < P_enter_n) {
+        Pt1 = candle.open;
+        inPosition = true;
+        
+        // ШАГ 3: Проверка стоп-лосса
+        if (candle.low <= P_stop_n) {
+          const Pt2 = P_stop_n;
+          E_percent += (Pt2 / Pt1 - 1) * 100;
+          t_f++;
+          inPosition = false;
+          n++;
+          continue;
+        }
+        
+        // ШАГ 4: Проверка выхода
+        if (candle.high >= P_exit_n) {
+          const Pt2 = P_exit_n;
+          E_percent += (Pt2 / Pt1 - 1) * 100;
+          t_c++;
+          inPosition = false;
+          n++;
+          continue;
+        }
+        
+        // ШАГ 5: Проверка пересечения линии
+        if (candle.low <= Pl_n) {
+          const Pt2 = candle.close;
+          E_percent += (Pt2 / Pt1 - 1) * 100;
+          t_f++;
+          inPosition = false;
+          break;  // конец торговли
+        }
+        
+        // Продолжаем держать позицию
+        n++;
+        continue;
+      }
+      
+      // ШАГ 6: Проверка входа по min
+      if (candle.low < P_enter_n) {
+        Pt1 = P_enter_n;
+        inPosition = true;
+        
+        // ШАГ 7: Проверка стоп-лосса
+        if (candle.low <= P_stop_n) {
+          const Pt2 = P_stop_n;
+          E_percent += (Pt2 / Pt1 - 1) * 100;
+          t_f++;
+          inPosition = false;
+          break;  // конец торговли
+        }
+        
+        // Продолжаем держать позицию
+        n++;
+        continue;
+      }
+      
+      // Не вошли в позицию - переход к следующему дню
+      n++;
+      continue;
+    }
+
+    // В ПОЗИЦИИ
+    // ШАГ 10: Проверка последнего дня
+    if (n === m - 1) {
+      const Pt2 = candle.close;
+      E_percent += (Pt2 / Pt1 - 1) * 100;
+      t_f++;
+      break;
+    }
+
+    // ШАГ 11: Проверка стоп-лосса по open
+    if (candle.open <= P_stop_n) {
+      const Pt2 = candle.open;
+      E_percent += (Pt2 / Pt1 - 1) * 100;
+      t_f++;
+      inPosition = false;
+      break;  // конец торговли
+    }
+
+    // ШАГ 12: Проверка выхода
+    if (candle.high >= P_exit_n) {
+      const Pt2 = P_exit_n;
+      E_percent += (Pt2 / Pt1 - 1) * 100;
+      t_c++;
+      inPosition = false;
+      n++;
+      continue;
+    }
+
+    // ШАГ 13: Проверка пересечения линии
+    if (candle.low <= Pl_n) {
+      const Pt2 = candle.close;
+      E_percent += (Pt2 / Pt1 - 1) * 100;
+      t_f++;
+      inPosition = false;
+      break;  // конец торговли
+    }
+
+    // Продолжаем держать позицию
+    n++;
+  }
+
+  const avgPercentPerDay = m > 0 ? E_percent / m : 0;
+
+  return {
+    avgPercentPerDay,
+    cleanTrades: t_c,
+    hasFactClose: t_f,
+    totalProfit: E_percent,
+    totalTrades: t_c + t_f
+  };
+}
+
+// ========================================
+// СТАРАЯ СИМУЛЯЦИЯ ТОРГОВЛИ (БЕЗ СТОПА) - ДЛЯ ОБРАТНОЙ СОВМЕСТИМОСТИ
 // ========================================
 function simulateTrading(data, curvePoints, entryPercent, exitPercent) {
   let totalProfit = 0;
@@ -52,9 +193,7 @@ function simulateTrading(data, curvePoints, entryPercent, exitPercent) {
     } else {
       const isLastDay = (i === data.length - 1);
       
-      // 🔥 НОВАЯ ЛОГИКА: Если купили в последний день
       if (i === buyDay && isLastDay) {
-        // Продаем по цене закрытия В ЭТОТ ЖЕ ДЕНЬ
         const sellPrice = candle.close;
         const profit = (sellPrice / buyPrice) * 100 - 100;
         totalProfit += profit;
@@ -66,7 +205,6 @@ function simulateTrading(data, curvePoints, entryPercent, exitPercent) {
         continue;
       }
       
-      // Если купили сегодня, но это не последний день - ждем следующего дня
       if (i === buyDay && !isLastDay) {
         continue;
       }
@@ -83,7 +221,6 @@ function simulateTrading(data, curvePoints, entryPercent, exitPercent) {
         buyPrice = 0;
         buyDay = -1;
       } else if (isLastDay) {
-        // Последний день - продаем по цене закрытия
         const sellPrice = candle.close;
         const profit = (sellPrice / buyPrice) * 100 - 100;
         totalProfit += profit;
@@ -107,7 +244,66 @@ function simulateTrading(data, curvePoints, entryPercent, exitPercent) {
 }
 
 // ========================================
-// ОПТИМИЗАЦИЯ СТРАТЕГИИ (без тестового периода)
+// 🆕 ОПТИМИЗАЦИЯ СТРАТЕГИИ С СТОП-ЛОССОМ
+// ========================================
+function optimizeLevel1TradingStrategyWithStop(data, curvePoints, minTradesPercent = 0) {
+  if (!data || data.length < 2 || !curvePoints) return null;
+
+  let localMax = 0;
+  data.forEach(candle => {
+    if (candle.high > localMax) {
+      localMax = candle.high;
+    }
+  });
+
+  let bestStrategy = null;
+  let maxAvgPercentPerDay = -Infinity;
+
+  // Перебор параметров с учетом стоп-лосса
+  for (let stopPercent = 1.0; stopPercent <= 10.0; stopPercent += 0.5) {
+    for (let entryPercent = 0.3; entryPercent <= 20.0; entryPercent += 0.1) {
+      for (let exitPercent = entryPercent + 0.3; exitPercent <= 30.0; exitPercent += 0.1) {
+        
+        const maxSupportPrice = Math.max(...curvePoints.map(p => p.price));
+        const exitPrice = maxSupportPrice * (1 + exitPercent / 100);
+        
+        if (exitPrice > localMax) {
+          break;
+        }
+
+        const result = simulateTradingWithStop(data, curvePoints, entryPercent, exitPercent, stopPercent);
+        
+        if (result && result.totalTrades > 0) {
+          const tradesPercent = (result.totalTrades / data.length) * 100;
+          
+          if (tradesPercent < minTradesPercent) {
+            continue;
+          }
+          
+          if (result.avgPercentPerDay > maxAvgPercentPerDay) {
+            maxAvgPercentPerDay = result.avgPercentPerDay;
+            bestStrategy = {
+              entryPercent: parseFloat(entryPercent.toFixed(1)),
+              exitPercent: parseFloat(exitPercent.toFixed(1)),
+              stopPercent: parseFloat(stopPercent.toFixed(1)),
+              avgPercentPerDay: parseFloat(result.avgPercentPerDay.toFixed(4)),
+              totalTrades: result.cleanTrades,
+              totalDays: data.length,
+              hasFactClose: result.hasFactClose,
+              tradesPercent: parseFloat(tradesPercent.toFixed(2)),
+              totalProfit: parseFloat(result.totalProfit.toFixed(2))
+            };
+          }
+        }
+      }
+    }
+  }
+
+  return bestStrategy;
+}
+
+// ========================================
+// ОПТИМИЗАЦИЯ СТРАТЕГИИ (без стоп-лосса) - ДЛЯ ОБРАТНОЙ СОВМЕСТИМОСТИ
 // ========================================
 function optimizeLevel1TradingStrategy(data, curvePoints, minTradesPercent = 0) {
   if (!data || data.length < 2 || !curvePoints) return null;
@@ -164,7 +360,7 @@ function optimizeLevel1TradingStrategy(data, curvePoints, minTradesPercent = 0) 
 // ========================================
 // ОСНОВНАЯ ФУНКЦИЯ (БЕЗ тестового периода)
 // ========================================
-export function calculateExponentialSupportLine(data, point1MaxDay = null, point2MinDay = null, minTradesPercent = 0, entryMultiplier = 0, exitMultiplier = 0) {
+export function calculateExponentialSupportLine(data, point1MaxDay = null, point2MinDay = null, minTradesPercent = 0, entryMultiplier = 0, exitMultiplier = 0, useStopLoss = false) {
   if (!data || data.length < 2) return null;
   
   data = roundPrices(data);
@@ -275,7 +471,10 @@ export function calculateExponentialSupportLine(data, point1MaxDay = null, point
     }
   });
   
-  const tradingStrategy = optimizeLevel1TradingStrategy(data, curvePoints, minTradesPercent);
+  // 🆕 Выбираем функцию оптимизации в зависимости от параметра useStopLoss
+  const tradingStrategy = useStopLoss
+    ? optimizeLevel1TradingStrategyWithStop(data, curvePoints, minTradesPercent)
+    : optimizeLevel1TradingStrategy(data, curvePoints, minTradesPercent);
   
   if (!tradingStrategy && minTradesPercent > 0) {
     console.log(`❌ Не найдена стратегия с процентом сделок >= ${minTradesPercent}%`);
@@ -291,12 +490,18 @@ export function calculateExponentialSupportLine(data, point1MaxDay = null, point
     const newEntry = parseFloat((originalEntry + range * entryMultiplier).toFixed(2));
     const newExit = parseFloat((originalExit - range * exitMultiplier).toFixed(2));
     
-    const simulation = simulateTrading(data, curvePoints, newEntry, newExit);
-    const tradesPercent = (simulation.cleanTrades / data.length) * 100;
+    const simulation = useStopLoss && tradingStrategy.stopPercent
+      ? simulateTradingWithStop(data, curvePoints, newEntry, newExit, tradingStrategy.stopPercent)
+      : simulateTrading(data, curvePoints, newEntry, newExit);
+    
+    const tradesPercent = useStopLoss
+      ? (simulation.totalTrades / data.length) * 100
+      : (simulation.cleanTrades / data.length) * 100;
     
     finalStrategy = {
       entryPercent: parseFloat(newEntry.toFixed(2)),
       exitPercent: parseFloat(newExit.toFixed(2)),
+      stopPercent: tradingStrategy.stopPercent || null,
       avgPercentPerDay: parseFloat(simulation.avgPercentPerDay.toFixed(2)),
       totalTrades: simulation.cleanTrades,
       totalDays: data.length,
@@ -316,17 +521,18 @@ export function calculateExponentialSupportLine(data, point1MaxDay = null, point
     endPrice: curvePoints[curvePoints.length - 1].price,
     tradingStrategy: finalStrategy,
     entryMultiplier: entryMultiplier,
-    exitMultiplier: exitMultiplier
+    exitMultiplier: exitMultiplier,
+    useStopLoss: useStopLoss
   };
 }
 
 // ========================================
-// 🔥 ФУНКЦИЯ С ТЕСТОВЫМ ПЕРИОДОМ (ИСПРАВЛЕННАЯ ЛОГИКА ПЕРЕСЕЧЕНИЯ)
+// 🆕 ФУНКЦИЯ С ТЕСТОВЫМ ПЕРИОДОМ (С НОВОЙ ЛОГИКОЙ)
 // ========================================
-export function calculateExponentialSupportLineWithTest(data, testPeriodDays, point1MaxDay = null, point2MinDay = null, minTradesPercent = 0, entryMultiplier = 0, exitMultiplier = 0) {
+export function calculateExponentialSupportLineWithTest(data, testPeriodDays, point1MaxDay = null, point2MinDay = null, minTradesPercent = 0, entryMultiplier = 0, exitMultiplier = 0, useStopLoss = false) {
   if (!data || data.length < 2) return null;
   if (testPeriodDays >= data.length) {
-    return calculateExponentialSupportLine(data, point1MaxDay, point2MinDay, minTradesPercent);
+    return calculateExponentialSupportLine(data, point1MaxDay, point2MinDay, minTradesPercent, entryMultiplier, exitMultiplier, useStopLoss);
   }
 
   data = roundPrices(data);
@@ -335,6 +541,7 @@ export function calculateExponentialSupportLineWithTest(data, testPeriodDays, po
   console.log(`Тестовый участок: дни 1-${testPeriodDays}`);
   console.log(`Исследуемый участок: дни ${testPeriodDays + 1}-${data.length}`);
   console.log(`Множители: вход × ${entryMultiplier}, выход × ${exitMultiplier}`);
+  console.log(`Стоп-лосс: ${useStopLoss ? 'ВКЛЮЧЕН' : 'ВЫКЛЮЧЕН'}`);
 
   const testData = data.slice(0, testPeriodDays);
 
@@ -400,40 +607,89 @@ export function calculateExponentialSupportLineWithTest(data, testPeriodDays, po
       if (candle.high > localMax) localMax = candle.high;
     });
 
-    for (let entryPercent = 0.3; entryPercent <= 20.0; entryPercent += 0.1) {
-      for (let exitPercent = entryPercent + 0.3; exitPercent <= 30.0; exitPercent += 0.1) {
-        
-        const maxSupportPrice = Math.max(...combo.testCurvePoints.map(p => p.price));
-        const exitPrice = maxSupportPrice * (1 + exitPercent / 100);
-        if (exitPrice > localMax) break;
+    if (useStopLoss) {
+      // Оптимизация с стоп-лоссом
+      for (let stopPercent = 1.0; stopPercent <= 10.0; stopPercent += 0.5) {
+        for (let entryPercent = 0.3; entryPercent <= 20.0; entryPercent += 0.1) {
+          for (let exitPercent = entryPercent + 0.3; exitPercent <= 30.0; exitPercent += 0.1) {
+            
+            const maxSupportPrice = Math.max(...combo.testCurvePoints.map(p => p.price));
+            const exitPrice = maxSupportPrice * (1 + exitPercent / 100);
+            if (exitPrice > localMax) break;
 
-        const testResult = simulateTrading(testData, combo.testCurvePoints, entryPercent, exitPercent);
-        const testTradesPercent = (testResult.cleanTrades / testData.length) * 100;
-        
-        if (testTradesPercent < minTradesPercent) continue;
+            const testResult = simulateTradingWithStop(testData, combo.testCurvePoints, entryPercent, exitPercent, stopPercent);
+            
+            if (!testResult || testResult.totalTrades === 0) continue;
+            
+            const testTradesPercent = (testResult.totalTrades / testData.length) * 100;
+            
+            if (testTradesPercent < minTradesPercent) continue;
 
-        if (testResult.avgPercentPerDay > maxTestAvg) {
-          maxTestAvg = testResult.avgPercentPerDay;
-          
-          bestCombo = {
-            point1Index: combo.point1Index,
-            point2Index: combo.point2Index,
-            point1Price: combo.point1Price,
-            point2Price: combo.point2Price,
-            percentPerDay: combo.percentPerDay,
-            percentPerDayPercent: ((combo.percentPerDay - 1) * 100).toFixed(4),
-            testCurvePoints: combo.testCurvePoints,
-            testStrategy: {
-              avgPercentPerDay: testResult.avgPercentPerDay.toFixed(4),
-              entryPercent: entryPercent.toFixed(1),
-              exitPercent: exitPercent.toFixed(1),
-              totalTrades: testResult.cleanTrades,
-              totalDays: testData.length,
-              hasFactClose: testResult.hasFactClose,
-              tradesPercent: testTradesPercent.toFixed(2),
-              totalProfit: testResult.totalProfit.toFixed(2)
+            if (testResult.avgPercentPerDay > maxTestAvg) {
+              maxTestAvg = testResult.avgPercentPerDay;
+              
+              bestCombo = {
+                point1Index: combo.point1Index,
+                point2Index: combo.point2Index,
+                point1Price: combo.point1Price,
+                point2Price: combo.point2Price,
+                percentPerDay: combo.percentPerDay,
+                percentPerDayPercent: ((combo.percentPerDay - 1) * 100).toFixed(4),
+                testCurvePoints: combo.testCurvePoints,
+                testStrategy: {
+                  avgPercentPerDay: testResult.avgPercentPerDay.toFixed(4),
+                  entryPercent: entryPercent.toFixed(1),
+                  exitPercent: exitPercent.toFixed(1),
+                  stopPercent: stopPercent.toFixed(1),
+                  totalTrades: testResult.cleanTrades,
+                  totalDays: testData.length,
+                  hasFactClose: testResult.hasFactClose,
+                  tradesPercent: testTradesPercent.toFixed(2),
+                  totalProfit: testResult.totalProfit.toFixed(2)
+                }
+              };
             }
-          };
+          }
+        }
+      }
+    } else {
+      // Оптимизация без стоп-лосса (старая логика)
+      for (let entryPercent = 0.3; entryPercent <= 20.0; entryPercent += 0.1) {
+        for (let exitPercent = entryPercent + 0.3; exitPercent <= 30.0; exitPercent += 0.1) {
+          
+          const maxSupportPrice = Math.max(...combo.testCurvePoints.map(p => p.price));
+          const exitPrice = maxSupportPrice * (1 + exitPercent / 100);
+          if (exitPrice > localMax) break;
+
+          const testResult = simulateTrading(testData, combo.testCurvePoints, entryPercent, exitPercent);
+          const testTradesPercent = (testResult.cleanTrades / testData.length) * 100;
+          
+          if (testTradesPercent < minTradesPercent) continue;
+
+          if (testResult.avgPercentPerDay > maxTestAvg) {
+            maxTestAvg = testResult.avgPercentPerDay;
+            
+            bestCombo = {
+              point1Index: combo.point1Index,
+              point2Index: combo.point2Index,
+              point1Price: combo.point1Price,
+              point2Price: combo.point2Price,
+              percentPerDay: combo.percentPerDay,
+              percentPerDayPercent: ((combo.percentPerDay - 1) * 100).toFixed(4),
+              testCurvePoints: combo.testCurvePoints,
+              testStrategy: {
+                avgPercentPerDay: testResult.avgPercentPerDay.toFixed(4),
+                entryPercent: entryPercent.toFixed(1),
+                exitPercent: exitPercent.toFixed(1),
+                stopPercent: null,
+                totalTrades: testResult.cleanTrades,
+                totalDays: testData.length,
+                hasFactClose: testResult.hasFactClose,
+                tradesPercent: testTradesPercent.toFixed(2),
+                totalProfit: testResult.totalProfit.toFixed(2)
+              }
+            };
+          }
         }
       }
     }
@@ -447,6 +703,9 @@ export function calculateExponentialSupportLineWithTest(data, testPeriodDays, po
   console.log(`\n🏆 ЛУЧШАЯ КОМБИНАЦИЯ НА ТЕСТЕ (${bestCombo.testStrategy.avgPercentPerDay}%):`);
   console.log(`   Точки: день ${bestCombo.point1Index + 1} → день ${bestCombo.point2Index + 1}`);
   console.log(`   Вход: ${bestCombo.testStrategy.entryPercent}%, Выход: ${bestCombo.testStrategy.exitPercent}%`);
+  if (useStopLoss) {
+    console.log(`   Стоп: ${bestCombo.testStrategy.stopPercent}%`);
+  }
 
   const fullCurvePoints = [];
   for (let k = 0; k < data.length; k++) {
@@ -454,13 +713,12 @@ export function calculateExponentialSupportLineWithTest(data, testPeriodDays, po
     fullCurvePoints.push({ index: k, price });
   }
 
-  // 🔥 НОВАЯ ЛОГИКА ПЕРЕСЕЧЕНИЯ
+  // Проверка пересечения
   let researchEndIndex = data.length - 1;
   let hasCrossing = false;
   
   for (let k = testPeriodDays; k < data.length; k++) {
     if (data[k].low < fullCurvePoints[k].price - 0.001) {
-      // 🔥 ВКЛЮЧАЕМ ДЕНЬ С ПЕРЕСЕЧЕНИЕМ!
       researchEndIndex = k;
       hasCrossing = true;
       console.log(`⚠️ Пересечение на дне ${k + 1} - ИСПОЛЬЗУЕМ ЭТОТ ДЕНЬ ДЛЯ ВЫХОДА`);
@@ -468,7 +726,6 @@ export function calculateExponentialSupportLineWithTest(data, testPeriodDays, po
     }
   }
 
-  // 🔥 БЕРЕМ ДАННЫЕ ВКЛЮЧАЯ ДЕНЬ ПЕРЕСЕЧЕНИЯ
   const researchDataForCalc = data.slice(testPeriodDays, researchEndIndex + 1);
   
   console.log(`\n📊 Исследуемый период: дни ${testPeriodDays + 1}-${researchEndIndex + 1} (${researchDataForCalc.length} дней)`);
@@ -490,7 +747,8 @@ export function calculateExponentialSupportLineWithTest(data, testPeriodDays, po
       testStrategy: bestCombo.testStrategy,
       researchStrategy: null,
       researchEndIndex: researchEndIndex,
-      hasCrossing: hasCrossing
+      hasCrossing: hasCrossing,
+      useStopLoss: useStopLoss
     };
   }
 
@@ -511,9 +769,13 @@ export function calculateExponentialSupportLineWithTest(data, testPeriodDays, po
   console.log(`   Новый вход: ${originalEntry}% + ${range.toFixed(2)}% × ${entryMultiplier} = ${modifiedEntryPercent.toFixed(2)}%`);
   console.log(`   Новый выход: ${originalExit}% - ${range.toFixed(2)}% × ${exitMultiplier} = ${modifiedExitPercent.toFixed(2)}%`);
 
-  // 🔥 СИМУЛЯЦИЯ С НОВОЙ ЛОГИКОЙ
-  const researchResult = simulateTrading(researchDataForCalc, researchCurvePoints, modifiedEntryPercent, modifiedExitPercent);
-  const researchTradesPercent = (researchResult.cleanTrades / researchDataForCalc.length) * 100;
+  const researchResult = useStopLoss && bestCombo.testStrategy.stopPercent
+    ? simulateTradingWithStop(researchDataForCalc, researchCurvePoints, modifiedEntryPercent, modifiedExitPercent, parseFloat(bestCombo.testStrategy.stopPercent))
+    : simulateTrading(researchDataForCalc, researchCurvePoints, modifiedEntryPercent, modifiedExitPercent);
+  
+  const researchTradesPercent = useStopLoss
+    ? (researchResult.totalTrades / researchDataForCalc.length) * 100
+    : (researchResult.cleanTrades / researchDataForCalc.length) * 100;
 
   console.log(`\n📊 РЕЗУЛЬТАТ НА ИССЛЕДУЕМОМ ПЕРИОДЕ:`);
   console.log(`   Средний %: ${researchResult.avgPercentPerDay.toFixed(4)}%`);
@@ -540,6 +802,7 @@ export function calculateExponentialSupportLineWithTest(data, testPeriodDays, po
       avgPercentPerDay: parseFloat(researchResult.avgPercentPerDay.toFixed(4)),
       entryPercent: parseFloat(modifiedEntryPercent.toFixed(2)),
       exitPercent: parseFloat(modifiedExitPercent.toFixed(2)),
+      stopPercent: bestCombo.testStrategy.stopPercent,
       totalTrades: researchResult.cleanTrades,
       totalDays: researchDataForCalc.length,
       hasFactClose: researchResult.hasFactClose,
@@ -549,6 +812,7 @@ export function calculateExponentialSupportLineWithTest(data, testPeriodDays, po
     researchEndIndex: researchEndIndex,
     hasCrossing: hasCrossing,
     entryMultiplier: entryMultiplier,
-    exitMultiplier: exitMultiplier
+    exitMultiplier: exitMultiplier,
+    useStopLoss: useStopLoss
   };
 }

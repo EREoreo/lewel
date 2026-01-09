@@ -10,7 +10,7 @@ export async function POST(request) {
     const file = formData.get('file');
     const startDate = formData.get('startDate');
     const endDate = formData.get('endDate');
-    const analysisType = formData.get('analysisType'); // 'level1' или 'level2'
+    const analysisType = formData.get('analysisType');
     
     // ПАРАМЕТРЫ ФИЛЬТРОВ
     const point1MaxDay = formData.get('point1MaxDay');
@@ -20,9 +20,13 @@ export async function POST(request) {
     // ТЕСТОВЫЙ ПЕРИОД
     const testPeriodDays = formData.get('testPeriodDays');
     
-    // 🆕 МНОЖИТЕЛИ
+    // МНОЖИТЕЛИ
     const entryMultiplier = formData.get('entryMultiplier');
     const exitMultiplier = formData.get('exitMultiplier');
+    
+    // 🆕 СТОП-ЛОСС
+    const useStopLoss = formData.get('useStopLoss') === 'true';
+    const manualStopPercent = formData.get('manualStopPercent');
 
     if (!file || !startDate || !endDate) {
       return NextResponse.json(
@@ -57,6 +61,7 @@ export async function POST(request) {
     console.log(`Тип: ${analysisType}`);
     console.log(`Тестовый период: ${testPeriodDays || 'НЕТ'} дней`);
     console.log(`Фильтры: точка1≤${point1MaxDay || 'любой'}, точка2≥${point2MinDay || 'любой'}, %сделок≥${minTradesPercent || 0}%`);
+    console.log(`Стоп-лосс: ${useStopLoss ? `${manualStopPercent}%` : 'ВЫКЛ'}`);
     if (testPeriodDays) {
       console.log(`Множители: вход × ${entryMultiplier || 1.0}, выход × ${exitMultiplier || 1.0}`);
     }
@@ -105,9 +110,14 @@ export async function POST(request) {
         const minTrades = minTradesPercent ? parseFloat(minTradesPercent) : 0;
         const testPeriod = testPeriodDays ? parseInt(testPeriodDays) : null;
         
-        // 🆕 Парсим множители
-        const entryMult = entryMultiplier ? parseFloat(entryMultiplier) : 1.0;
-        const exitMult = exitMultiplier ? parseFloat(exitMultiplier) : 1.0;
+        // Парсим множители
+        const entryMult = entryMultiplier ? parseFloat(entryMultiplier) : 0;
+        const exitMult = exitMultiplier ? parseFloat(exitMultiplier) : 0;
+        
+        // 🆕 Парсим стоп-лосс
+        const manualStop = (useStopLoss && manualStopPercent) 
+          ? parseFloat(manualStopPercent) 
+          : null;
 
         // Проверка тестового периода
         if (testPeriod && testPeriod >= stockData.length) {
@@ -129,8 +139,10 @@ export async function POST(request) {
               p1MaxDay, 
               p2MinDay, 
               minTrades,
-              entryMult,  // 🆕
-              exitMult    // 🆕
+              entryMult,
+              exitMult,
+              useStopLoss,   // 🆕
+              manualStop     // 🆕
             );
           } else {
             console.log(`  📊 Используем обычный LEVEL 1`);
@@ -138,7 +150,11 @@ export async function POST(request) {
               stockData, 
               p1MaxDay, 
               p2MinDay, 
-              minTrades
+              minTrades,
+              entryMult,
+              exitMult,
+              useStopLoss,   // 🆕
+              manualStop     // 🆕
             );
           }
         } else {
@@ -151,8 +167,10 @@ export async function POST(request) {
               p1MaxDay, 
               p2MinDay, 
               minTrades,
-              entryMult,  // 🆕
-              exitMult    // 🆕
+              entryMult,
+              exitMult,
+              useStopLoss,   // 🆕
+              manualStop     // 🆕
             );
           } else {
             console.log(`  📊 Используем обычный LEVEL 2`);
@@ -160,7 +178,11 @@ export async function POST(request) {
               stockData, 
               p1MaxDay, 
               p2MinDay, 
-              minTrades
+              minTrades,
+              entryMult,
+              exitMult,
+              useStopLoss,   // 🆕
+              manualStop     // 🆕
             );
           }
         }
@@ -186,11 +208,10 @@ export async function POST(request) {
           continue;
         }
 
-        // 💡 ФОРМИРУЕМ СТРОКУ РЕЗУЛЬТАТА
+        // ФОРМИРУЕМ СТРОКУ РЕЗУЛЬТАТА
         if (analysisResult.testPeriodDays) {
-          // Режим с тестовым периодом - ОДНА СТРОКА
+          // Режим с тестовым периодом
           
-          // Проверяем есть ли результаты исследования
           if (!analysisResult.researchStrategy) {
             console.log(`  ⚠️ Нет исследуемого периода (пересечение) - пропускаем`);
             skippedCount++;
@@ -208,6 +229,7 @@ export async function POST(request) {
             parseFloat(strategy.avgPercentPerDay),
             parseFloat(strategy.entryPercent),
             parseFloat(strategy.exitPercent),
+            parseFloat(strategy.stopPercent || 0),  // 🆕
             strategy.totalTrades,
             strategy.totalDays,
             strategy.hasFactClose,
@@ -217,6 +239,7 @@ export async function POST(request) {
             parseFloat(analysisResult.researchStrategy.avgPercentPerDay),
             parseFloat(analysisResult.researchStrategy.entryPercent),
             parseFloat(analysisResult.researchStrategy.exitPercent),
+            parseFloat(analysisResult.researchStrategy.stopPercent || 0),  // 🆕
             analysisResult.researchStrategy.totalTrades,
             analysisResult.researchStrategy.totalDays,
             analysisResult.researchStrategy.hasFactClose,
@@ -225,12 +248,13 @@ export async function POST(request) {
             // МЕТРИКИ
             analysisResult.hasCrossing ? 'Да' : 'Нет',
             entryMult,
-            exitMult
+            exitMult,
+            useStopLoss ? 'Да' : 'Нет'  // 🆕
           ]);
           
-          console.log(`  ✅ Обработан | Тест: ${strategy.avgPercentPerDay}% | Иссл: ${analysisResult.researchStrategy.avgPercentPerDay}%`);
+          console.log(`  ✅ Обработан | Тест: ${strategy.avgPercentPerDay}% (стоп: ${strategy.stopPercent || 0}%) | Иссл: ${analysisResult.researchStrategy.avgPercentPerDay}% (стоп: ${analysisResult.researchStrategy.stopPercent || 0}%)`);
         } else {
-          // Обычный режим - стандартный формат (БЕЗ ЗНАКОВ %)
+          // Обычный режим
           results.push([
             ticker,
             parseFloat(point1.price.toFixed(2)),
@@ -241,13 +265,16 @@ export async function POST(request) {
             parseFloat(strategy.avgPercentPerDay),
             parseFloat(strategy.entryPercent),
             parseFloat(strategy.exitPercent),
+            parseFloat(strategy.stopPercent || 0),  // 🆕
             strategy.totalTrades,
             strategy.totalDays,
             strategy.hasFactClose,
-            parseFloat(strategy.tradesPercent)
+            parseFloat(strategy.tradesPercent),
+            parseFloat(strategy.totalProfit || 0),
+            useStopLoss ? 'Да' : 'Нет'  // 🆕
           ]);
           
-          console.log(`  ✅ Обработан успешно | Средний %: ${strategy.avgPercentPerDay}%`);
+          console.log(`  ✅ Обработан успешно | Средний %: ${strategy.avgPercentPerDay}% | Стоп: ${strategy.stopPercent || 0}%`);
         }
 
         processedCount++;
@@ -276,10 +303,9 @@ export async function POST(request) {
     const wb = XLSX.utils.book_new();
     const sheetName = analysisType === 'level1' ? 'Level1 Support' : 'Level2 Resistance';
     
-    // 💡 ЗАГОЛОВКИ
+    // ЗАГОЛОВКИ
     let headers;
     if (testPeriodDays) {
-      // Расширенные заголовки для режима с тестом
       headers = [
         'Тикер', 
         'Цена точки 1', 
@@ -291,6 +317,7 @@ export async function POST(request) {
         'ТЕСТ: Средний % в день',
         'ТЕСТ: % для входа',
         'ТЕСТ: % для выхода',
+        'ТЕСТ: Стоп %',           // 🆕
         'ТЕСТ: Трейды',
         'ТЕСТ: Всего дней',
         'ТЕСТ: Закрыто по факту',
@@ -300,6 +327,7 @@ export async function POST(request) {
         'ИССЛ: Средний % в день',
         'ИССЛ: % для входа (×МН)',
         'ИССЛ: % для выхода (×МН)',
+        'ИССЛ: Стоп %',           // 🆕
         'ИССЛ: Трейды',
         'ИССЛ: Всего дней',
         'ИССЛ: Закрыто по факту',
@@ -308,10 +336,10 @@ export async function POST(request) {
         // МЕТРИКИ
         'Пересечение?',
         'Множитель входа',
-        'Множитель выхода'
+        'Множитель выхода',
+        'Стоп-лосс'               // 🆕
       ];
     } else {
-      // Стандартные заголовки
       headers = [
         'Тикер', 
         'Цена точки 1', 
@@ -322,10 +350,13 @@ export async function POST(request) {
         'Средний % в день',
         '% для входа',
         '% для выхода',
+        'Стоп %',                 // 🆕
         'Трейды',
         'Всего дней',
         'Закрыто по факту',
-        'Процент сделок'
+        'Процент сделок',
+        'Общая прибыль',
+        'Стоп-лосс'               // 🆕
       ];
     }
 
