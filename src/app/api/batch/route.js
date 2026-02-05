@@ -1,8 +1,63 @@
-import yahooFinance from 'yahoo-finance2';
 import { NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 import { calculateExponentialResistanceLine, calculateExponentialResistanceLineWithTest } from '../../lib/level2Analysis';
 import { calculateExponentialSupportLine, calculateExponentialSupportLineWithTest } from '../../lib/level1Analysis';
+
+// Massive.com API endpoint (бывший Polygon.io)
+const MASSIVE_API_URL = 'https://api.massive.com/v2';
+
+// Функция для получения API ключа
+function getApiKey() {
+  const apiKey = process.env.MASSIVE_API_KEY;
+  if (!apiKey) {
+    throw new Error('MASSIVE_API_KEY not found in environment variables');
+  }
+  return apiKey;
+}
+
+// Функция задержки для rate limiting
+// Free tier: 5 запросов/минуту = 1 запрос каждые 12 секунд
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Функция для получения исторических данных через Massive.com
+async function getHistoricalData(ticker, startDate, endDate) {
+  const apiKey = getApiKey();
+  
+  // Massive.com использует формат YYYY-MM-DD
+  const start = new Date(startDate).toISOString().split('T')[0];
+  const end = new Date(endDate).toISOString().split('T')[0];
+  
+  // Massive API: Aggregates (bars) endpoint
+  const url = `${MASSIVE_API_URL}/aggs/ticker/${ticker}/range/1/day/${start}/${end}?adjusted=true&sort=asc&limit=50000&apiKey=${apiKey}`;
+  
+  const response = await fetch(url);
+  
+  if (!response.ok) {
+    throw new Error(`Massive.com API error: ${response.status}`);
+  }
+  
+  const data = await response.json();
+  
+  if (data.status === 'ERROR') {
+    throw new Error(`Massive.com error: ${data.error}`);
+  }
+  
+  if (!data.results || data.results.length === 0) {
+    return [];
+  }
+  
+  // Преобразуем данные Massive.com в формат Yahoo Finance
+  const quotes = data.results.map(bar => ({
+    date: new Date(bar.t),
+    open: bar.o,
+    high: bar.h,
+    low: bar.l,
+    close: bar.c,
+    volume: bar.v
+  }));
+  
+  return quotes;
+}
 
 export async function POST(request) {
   try {
@@ -55,13 +110,14 @@ export async function POST(request) {
       );
     }
 
-    console.log(`\n🚀 НАЧАЛО МАССОВОЙ ОБРАБОТКИ`);
+    console.log(`\n🚀 НАЧАЛО МАССОВОЙ ОБРАБОТКИ (Massive.com API - FREE TIER)`);
     console.log(`Тикеров: ${tickers.length}`);
     console.log(`Период: ${startDate} - ${endDate}`);
     console.log(`Тип: ${analysisType}`);
     console.log(`Тестовый период: ${testPeriodDays || 'НЕТ'} дней`);
     console.log(`Фильтры: точка1≤${point1MaxDay || 'любой'}, точка2≥${point2MinDay || 'любой'}, %сделок≥${minTradesPercent || 0}%`);
     console.log(`Стоп-лосс: ${useStopLoss ? `${manualStopPercent}%` : 'ВЫКЛ'}`);
+    console.log(`⏱️ Ожидаемое время: ~${Math.ceil(tickers.length * 12 / 60)} минут (Free tier: 5 запросов/минуту)`);
     if (testPeriodDays) {
       console.log(`Множители: вход × ${entryMultiplier || 1.0}, выход × ${exitMultiplier || 1.0}`);
     }
@@ -76,29 +132,22 @@ export async function POST(request) {
       try {
         console.log(`\n📊 Обработка ${ticker} (${processedCount + skippedCount + 1}/${tickers.length})`);
         
-        // Получаем данные акций
+        // Получаем данные акций через Massive.com
         const start = new Date(startDate);
         const end = new Date(endDate);
         end.setDate(end.getDate() + 1);
 
-        const result = await yahooFinance.chart(ticker, {
-          period1: start,
-          period2: end,
-          interval: '1d'
-        });
-
-        const stockData = result.quotes.map(quote => ({
-          date: quote.date,
-          open: quote.open,
-          high: quote.high,
-          low: quote.low,
-          close: quote.close,
-          volume: quote.volume
-        }));
+        const stockData = await getHistoricalData(
+          ticker,
+          start.toISOString().split('T')[0],
+          end.toISOString().split('T')[0]
+        );
 
         if (stockData.length === 0) {
           console.log(`  ⚠️ Нет данных - пропускаем`);
           skippedCount++;
+          // Задержка для rate limiting (Free tier: 5 запросов/минуту = 12 секунд между запросами)
+          await delay(12000);
           continue;
         }
 
@@ -123,6 +172,7 @@ export async function POST(request) {
         if (testPeriod && testPeriod >= stockData.length) {
           console.log(`  ⚠️ Тестовый период (${testPeriod}) >= всех дней (${stockData.length}) - пропускаем`);
           skippedCount++;
+          await delay(12000);
           continue;
         }
 
@@ -141,8 +191,8 @@ export async function POST(request) {
               minTrades,
               entryMult,
               exitMult,
-              useStopLoss,   // 🆕
-              manualStop     // 🆕
+              useStopLoss,
+              manualStop
             );
           } else {
             console.log(`  📊 Используем обычный LEVEL 1`);
@@ -153,8 +203,8 @@ export async function POST(request) {
               minTrades,
               entryMult,
               exitMult,
-              useStopLoss,   // 🆕
-              manualStop     // 🆕
+              useStopLoss,
+              manualStop
             );
           }
         } else {
@@ -169,8 +219,8 @@ export async function POST(request) {
               minTrades,
               entryMult,
               exitMult,
-              useStopLoss,   // 🆕
-              manualStop     // 🆕
+              useStopLoss,
+              manualStop
             );
           } else {
             console.log(`  📊 Используем обычный LEVEL 2`);
@@ -181,8 +231,8 @@ export async function POST(request) {
               minTrades,
               entryMult,
               exitMult,
-              useStopLoss,   // 🆕
-              manualStop     // 🆕
+              useStopLoss,
+              manualStop
             );
           }
         }
@@ -191,6 +241,7 @@ export async function POST(request) {
         if (!analysisResult) {
           console.log(`  ❌ Не прошел фильтры - пропускаем`);
           skippedCount++;
+          await delay(12000);
           continue;
         }
 
@@ -205,6 +256,7 @@ export async function POST(request) {
         if (!strategy) {
           console.log(`  ❌ Стратегия не найдена - пропускаем`);
           skippedCount++;
+          await delay(12000);
           continue;
         }
 
@@ -215,6 +267,7 @@ export async function POST(request) {
           if (!analysisResult.researchStrategy) {
             console.log(`  ⚠️ Нет исследуемого периода (пересечение) - пропускаем`);
             skippedCount++;
+            await delay(12000);
             continue;
           }
           
@@ -229,7 +282,7 @@ export async function POST(request) {
             parseFloat(strategy.avgPercentPerDay),
             parseFloat(strategy.entryPercent),
             parseFloat(strategy.exitPercent),
-            parseFloat(strategy.stopPercent || 0),  // 🆕
+            parseFloat(strategy.stopPercent || 0),
             strategy.totalTrades,
             strategy.totalDays,
             strategy.hasFactClose,
@@ -239,7 +292,7 @@ export async function POST(request) {
             parseFloat(analysisResult.researchStrategy.avgPercentPerDay),
             parseFloat(analysisResult.researchStrategy.entryPercent),
             parseFloat(analysisResult.researchStrategy.exitPercent),
-            parseFloat(analysisResult.researchStrategy.stopPercent || 0),  // 🆕
+            parseFloat(analysisResult.researchStrategy.stopPercent || 0),
             analysisResult.researchStrategy.totalTrades,
             analysisResult.researchStrategy.totalDays,
             analysisResult.researchStrategy.hasFactClose,
@@ -249,7 +302,7 @@ export async function POST(request) {
             analysisResult.hasCrossing ? 'Да' : 'Нет',
             entryMult,
             exitMult,
-            useStopLoss ? 'Да' : 'Нет'  // 🆕
+            useStopLoss ? 'Да' : 'Нет'
           ]);
           
           console.log(`  ✅ Обработан | Тест: ${strategy.avgPercentPerDay}% (стоп: ${strategy.stopPercent || 0}%) | Иссл: ${analysisResult.researchStrategy.avgPercentPerDay}% (стоп: ${analysisResult.researchStrategy.stopPercent || 0}%)`);
@@ -265,23 +318,28 @@ export async function POST(request) {
             parseFloat(strategy.avgPercentPerDay),
             parseFloat(strategy.entryPercent),
             parseFloat(strategy.exitPercent),
-            parseFloat(strategy.stopPercent || 0),  // 🆕
+            parseFloat(strategy.stopPercent || 0),
             strategy.totalTrades,
             strategy.totalDays,
             strategy.hasFactClose,
             parseFloat(strategy.tradesPercent),
             parseFloat(strategy.totalProfit || 0),
-            useStopLoss ? 'Да' : 'Нет'  // 🆕
+            useStopLoss ? 'Да' : 'Нет'
           ]);
           
           console.log(`  ✅ Обработан успешно | Средний %: ${strategy.avgPercentPerDay}% | Стоп: ${strategy.stopPercent || 0}%`);
         }
 
         processedCount++;
+        
+        // Задержка для rate limiting (Free tier: 5 запросов/минуту = 12 секунд)
+        console.log(`  ⏳ Ожидание 12 секунд (rate limit)...`);
+        await delay(12000);
 
       } catch (error) {
         console.error(`  ❌ Ошибка обработки ${ticker}:`, error.message);
         skippedCount++;
+        await delay(12000);
         continue;
       }
     }
@@ -317,7 +375,7 @@ export async function POST(request) {
         'ТЕСТ: Средний % в день',
         'ТЕСТ: % для входа',
         'ТЕСТ: % для выхода',
-        'ТЕСТ: Стоп %',           // 🆕
+        'ТЕСТ: Стоп %',
         'ТЕСТ: Трейды',
         'ТЕСТ: Всего дней',
         'ТЕСТ: Закрыто по факту',
@@ -327,7 +385,7 @@ export async function POST(request) {
         'ИССЛ: Средний % в день',
         'ИССЛ: % для входа (×МН)',
         'ИССЛ: % для выхода (×МН)',
-        'ИССЛ: Стоп %',           // 🆕
+        'ИССЛ: Стоп %',
         'ИССЛ: Трейды',
         'ИССЛ: Всего дней',
         'ИССЛ: Закрыто по факту',
@@ -337,7 +395,7 @@ export async function POST(request) {
         'Пересечение?',
         'Множитель входа',
         'Множитель выхода',
-        'Стоп-лосс'               // 🆕
+        'Стоп-лосс'
       ];
     } else {
       headers = [
@@ -350,13 +408,13 @@ export async function POST(request) {
         'Средний % в день',
         '% для входа',
         '% для выхода',
-        'Стоп %',                 // 🆕
+        'Стоп %',
         'Трейды',
         'Всего дней',
         'Закрыто по факту',
         'Процент сделок',
         'Общая прибыль',
-        'Стоп-лосс'               // 🆕
+        'Стоп-лосс'
       ];
     }
 
